@@ -52,8 +52,6 @@ addEventListener('unhandledrejection',e=>$('msg').textContent='Error: '+((e.reas
 let THREE,GLTFLoader;
 try{THREE=await import('three');({GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js'));}
 catch(e){$('msg').textContent='Could not load three.js from the internet. Check your connection.';throw e;}
-// ---- built-in models: they live in the assets/ folder next to this file. Replace a file there (same name, same object names) to change it ----
-const A={table:'assets/table.glb',racket:'assets/racket.glb',pencil:'assets/pencil.glb',ball:'assets/ball.glb'};
 // ---- tweak here ----
 const G=9, R=0.07, RS=0.3, E=0.88, WIN=11, AI_ERR=0, AI_SPEED=15, TILT=0.15, IDLE_AFTER=5, MOVE_AMP=1.3, ZBASE=3.0, FADE=0, LEAN_GAIN=0.7, LEAN_RETURN=0.1;
 // AI level = chance the AI catches a legal ball. On a miss it goes to the wrong spot and really whiffs.
@@ -137,11 +135,41 @@ function draw(){
 const dofSafe=()=>{try{dofSize();}catch(e){console.warn('background blur not available:',e);dofOn=false;rt=null;}};
 addEventListener('resize',()=>{resize();dofSafe();}); resize(); dofSafe();
 
-// ---- load ----
-const L=new GLTFLoader(), load=u=>new Promise((ok,no)=>L.load(u,g=>{g.scene.animations=g.animations;ok(g.scene)},undefined,no));
-let tableS,racketS,racketP,ball; // racketS = AI racket (bread), racketP = your racket (pencils)
-try{[tableS,racketS,racketP,ball]=await Promise.all([load(A.table),load(A.racket),load(A.pencil),load(A.ball)]);}
-catch(e){msg(location.protocol==='file:'?"Can't load the assets folder from a file. Open the game from your website link (or a local server), not by double-clicking the file.":'Failed to load assets: '+((e&&e.message)||e));await new Promise(()=>{});}
+// ---- load: every .glb inside assets/racket, assets/ball and assets/table is loaded. No file name is written in the code ----
+const L=new GLTFLoader(), KINDS=['racket','ball','table'], FOLDER=k=>'assets/'+k+'/', hasGlb=n=>/\.glb$/i.test(n);
+const parseBuf=buf=>new Promise((ok,no)=>L.parse(buf,'',g=>{g.scene.animations=g.animations;ok(g.scene);},no));
+const byName=(a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'});
+async function listKind(kind){ // which files are in the folder? a website can't list a folder by itself, so we try three ways
+  const names=new Set(); let ok=false;
+  try{ const r=await fetch('assets/manifest.json',{cache:'no-cache'}); if(r.ok){const j=await r.json(); if(Array.isArray(j[kind])){j[kind].forEach(n=>names.add(n));ok=true;}} }catch(e){}   // 1. assets/manifest.json (optional)
+  if(!ok)try{ const r=await fetch(FOLDER(kind),{cache:'no-cache'}); if(r.ok&&(r.headers.get('content-type')||'').includes('html')){ // 2. the folder listing of a local server
+    for(const m of (await r.text()).matchAll(/href="([^"?#]+)"/gi)){const n=decodeURIComponent(m[1]).split('/').pop(); if(hasGlb(n))names.add(n);} ok=true; } }catch(e){}
+  if(!ok&&/\.github\.io$/i.test(location.hostname)){ // 3. GitHub Pages: ask GitHub what is in the repository folder
+    const key='pp.list.'+kind;
+    try{
+      const seg=location.pathname.split('/')[1], repo=seg&&!/\.html?$/i.test(seg)?seg:location.hostname;
+      const r=await fetch(`https://api.github.com/repos/${location.hostname.split('.')[0]}/${repo}/contents/assets/${kind}`);
+      if(r.status===404)ok=true; else if(r.ok){ (await r.json()).filter(f=>f.type==='file').forEach(f=>names.add(f.name)); ok=true; try{localStorage.setItem(key,JSON.stringify([...names]));}catch(e){} } else throw new Error('HTTP '+r.status);
+    }catch(e){ try{ (JSON.parse(localStorage.getItem(key)||'[]')).forEach(n=>names.add(n)); ok=names.size>0; }catch(e2){} } // GitHub busy (limit): use the last list we saw
+  }
+  return {names:[...names].filter(hasGlb).sort(byName),ok};
+}
+async function loadKind(kind,names){
+  const out=[],bad=[];
+  await Promise.all(names.map(async n=>{ try{
+    const r=await fetch(FOLDER(kind)+encodeURIComponent(n),{cache:'no-cache'}); if(!r.ok)throw new Error('HTTP '+r.status);
+    const buf=await r.arrayBuffer(); out.push({n,buf,src:await parseBuf(buf)});
+  }catch(e){bad.push(`${kind}/${n}`);console.warn('asset failed',kind,n,e);} }));
+  return {out:out.sort((a,b)=>byName(a.n,b.n)),bad};
+}
+const LOADED={}, LOAD_BAD=[];
+if(location.protocol==='file:'){msg("Can't read the assets folders from a file. Open the game from your website link (or a local server), not by double-clicking the file.");await new Promise(()=>{});}
+try{
+  const lists=await Promise.all(KINDS.map(listKind));
+  for(let i=0;i<KINDS.length;i++){const r=await loadKind(KINDS[i],lists[i].names); LOADED[KINDS[i]]=r.out; LOAD_BAD.push(...r.bad);}
+}catch(e){msg('Failed to load assets: '+((e&&e.message)||e));await new Promise(()=>{});}
+{ const none=KINDS.filter(k=>!LOADED[k].length);
+  if(none.length){msg('Nothing to play with yet. Put at least one .glb file in: '+none.map(k=>'assets/'+k+'/').join(', ')+(LOAD_BAD.length?'  (could not load: '+LOAD_BAD.join(', ')+')':''));await new Promise(()=>{});} }
 // ================= assets: built-ins + player uploads =================
 // Racket .glb : an object named "collision" (invisible hit area). Animations: Left / Right / Idle / Smash (same names as the built-in rackets).
 // Table scene .glb : objects named "board" and "net" (lit, with shadows). Everything else = flat background, not affected by light, ball or anything.
@@ -167,7 +195,7 @@ function rimify(root,[hex,str]){
     }});
 }
 // ---- rackets ----
-let REF_H=0; // height of the built-in racket: every racket is scaled to the same size
+let REF_H=2.1031851768493652; // every racket is scaled to this height (it stands on y=0)
 function prepRacket(src){
   if(src.userData.prepped)return; src.userData.prepped=true;
   // smash = additive layer, so it mixes with left/right/idle
@@ -189,7 +217,6 @@ function prepRacket(src){
   src.userData.fit=size.y>1e-3?REF_H/size.y:1;
   src.children.forEach(ch=>{ch.position.x-=c.x; ch.position.z-=c.z; ch.position.y-=bx.min.y;});
 }
-prepRacket(racketS); prepRacket(racketP); // bread first: it sets the reference size
 
 // rackets: mesh named "collision" is invisible and is the only thing that touches the ball
 function mkRacket(owner,flip,src){
@@ -220,13 +247,10 @@ function measure(board,net){
   const bb=boxOf(board), nb=boxOf(net);
   return {TOP:bb.max.y,HX:bb.max.x,HZ:bb.max.z,NZ:(nb.min.z+nb.max.z)/2,NH:(nb.max.z-nb.min.z)/2+0.005,NTOP:nb.max.y,NX:nb.max.x};
 }
-// built-in table (the reference every uploaded scene is fitted to)
-tableS.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});
-const DEFB=findNamed(tableS,isBoard), DEFN=findNamed(tableS,isNet);
-DEFB.traverse(o=>{ if(o.isMesh)for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&m.color&&m.map)m.color.multiplyScalar(TABLE_BRIGHT); });
-const DEF_BOX=boxOf(DEFB), DEF_C=DEF_BOX.getCenter(new THREE.Vector3()), DEF_LEN=DEF_BOX.getSize(new THREE.Vector3());
+// every table scene is fitted to the same board: length DEF_LEN_Z, centred on x=z=0, top at y=0
+const DEF_LEN_Z=4.29433536529541, FLOOR_Y=-0.4201059937477112;
 const floor=new THREE.Mesh(new THREE.CircleGeometry(45,64),new THREE.MeshStandardMaterial({color:FLOOR,roughness:1}));
-floor.rotation.x=-Math.PI/2; floor.position.y=boxOf(tableS).min.y; floor.receiveShadow=true; scene.add(floor);
+floor.rotation.x=-Math.PI/2; floor.position.y=FLOOR_Y; floor.receiveShadow=true; scene.add(floor);
 
 function flatten(mesh){ // background: plain colour/texture, no lighting, no fog, no tone mapping, no shadows
   const cv=m=>{
@@ -238,21 +262,31 @@ function flatten(mesh){ // background: plain colour/texture, no lighting, no fog
   mesh.castShadow=mesh.receiveShadow=false;
 }
 function buildTable(src){
-  const board=findNamed(src,isBoard), net=findNamed(src,isNet), root=new THREE.Group(); root.add(src);
+  const board=findNamed(src,isBoard), net=findNamed(src,isNet), root=new THREE.Group(); let flat=0; root.add(src);
+  board.traverse(o=>{ if(o.isMesh)for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&m.color&&m.map)m.color.multiplyScalar(TABLE_BRIGHT); });
+  // parts of the table itself (frame, legs...) are lit too, even if unnamed: anything that sits inside the board's footprint (a bit bigger than the board, and not far above or below it)
+  const b0=boxOf(board), z0=b0.getSize(new THREE.Vector3()), near=b0.clone().expandByVector(new THREE.Vector3(z0.x*0.25,z0.z*0.5,z0.z*0.25));
   src.traverse(o=>{ if(!o.isMesh)return; let lit=false; for(let q=o;q&&q!==root;q=q.parent)if(isTableish(q.name)){lit=true;break;}
-    if(lit)o.castShadow=o.receiveShadow=true; else flatten(o); });
+    if(!lit&&near.containsBox(new THREE.Box3().setFromObject(o)))lit=true;
+    if(lit)o.castShadow=o.receiveShadow=true; else{flatten(o);flat++;} });
   let bb=boxOf(board), sz=bb.getSize(new THREE.Vector3());
   if(sz.x>sz.z){root.rotation.y=Math.PI/2; bb=boxOf(board); sz=bb.getSize(new THREE.Vector3());} // long side of the board along z
-  root.scale.setScalar(DEF_LEN.z/sz.z);               // board = same size as the built-in table
+  root.scale.setScalar(DEF_LEN_Z/sz.z);               // every board gets the same size
   bb=boxOf(board); const c=bb.getCenter(new THREE.Vector3());
-  root.position.set(DEF_C.x-c.x, DEF_BOX.max.y-bb.max.y, DEF_C.z-c.z); // board centred, top at the same height
-  return {root,M:measure(board,net)};
+  root.position.set(-c.x, -bb.max.y, -c.z);          // board centred, top at y = 0
+  return {root,M:measure(board,net),flat};
 }
 
 // ---- library + selection ----
-const LIB={racket:[{name:'Pencils racket',src:racketP,builtin:true},{name:'Bread racket',src:racketS,builtin:true}],
-           table:[{name:'Default table',root:tableS,M:measure(DEFB,DEFN),builtin:true}]};
-const sel={P:LIB.racket[0],A:LIB.racket[1],T:null};
+const labelOf=n=>n.replace(/\.[^.]+$/,'');
+const LIB={racket:[],table:[],ball:[]};
+for(const e of LOADED.racket){prepRacket(e.src); LIB.racket.push({name:uniq(LIB.racket,labelOf(e.n)),src:e.src,buf:e.buf,builtin:true});}
+for(const e of LOADED.table){const t=buildTable(e.src); LIB.table.push({name:uniq(LIB.table,labelOf(e.n)),root:t.root,M:t.M,flat:t.flat,buf:e.buf,builtin:true});}
+for(const e of LOADED.ball)LIB.ball.push({name:uniq(LIB.ball,labelOf(e.n)),src:e.src,builtin:true});
+const mem=(()=>{try{return JSON.parse(localStorage.getItem('pp.sel')||'{}');}catch(e){return {};}})(), pick=(l,n,d)=>l.find(e=>e.name===n)||d;
+// first file = the AI's racket, second = yours (until you choose and the game remembers it)
+const sel={A:pick(LIB.racket,mem.A,LIB.racket[0]),P:pick(LIB.racket,mem.P,LIB.racket[1]||LIB.racket[0]),T:pick(LIB.table,mem.T,LIB.table[0]),B:pick(LIB.ball,mem.B,LIB.ball[0])};
+const saveSel=()=>{try{localStorage.setItem('pp.sel',JSON.stringify({P:sel.P.name,A:sel.A.name,T:sel.T.name,B:sel.B.name}));}catch(e){}};
 let P,AI,curTable=null;
 function setRacket(which,entry,reset=true){
   const old=which==='P'?P:AI, r=mkRacket(which,which==='A',entry.src);
@@ -262,13 +296,20 @@ function setRacket(which,entry,reset=true){
 }
 function setTable(entry,reset=true){
   if(curTable)scene.remove(curTable.root);
-  curTable=entry; sel.T=entry; rimify(entry.root,RIM.table); scene.add(entry.root); ({TOP,HX,HZ,NZ,NH,NTOP,NX}=entry.M); floor.visible=!!entry.builtin;
+  curTable=entry; sel.T=entry; rimify(entry.root,RIM.table); scene.add(entry.root); ({TOP,HX,HZ,NZ,NH,NTOP,NX}=entry.M); floor.visible=!entry.flat;
   if(reset)resetMatch();
 }
 function resetMatch(){if(mode==='guest')return; score.P=score.A=0;server='P';hud();startServe();}
-setRacket('P',sel.P,false); setRacket('A',sel.A,false); setTable(LIB.table[0],false);
+const ball=new THREE.Group(); ball.scale.setScalar(R); scene.add(ball);
+function setBall(entry){ // any ball model: centred and sized to a radius of 1 (the group is scaled to the real radius R)
+  if(ball.userData.m)ball.remove(ball.userData.m);
+  const m=entry.src.clone(true), bx=boxOf(m), c=bx.getCenter(new THREE.Vector3()), z=bx.getSize(new THREE.Vector3()), w=new THREE.Group();
+  m.position.sub(c); w.add(m); w.scale.setScalar(2/Math.max(z.x,z.y,z.z,1e-6));
+  m.traverse(o=>{if(o.isMesh)o.castShadow=true;}); rimify(w,RIM.ball); ball.add(w); ball.userData.m=w; sel.B=entry;
+}
+setBall(sel.B);
+setRacket('P',sel.P,false); setRacket('A',sel.A,false); setTable(sel.T,false);
 
-ball.scale.setScalar(R); rimify(ball,RIM.ball); scene.add(ball); ball.traverse(o=>{if(o.isMesh)o.castShadow=true;});
 
 // ---- state ----
 const p=ball.position, v=new THREE.Vector3(), tmp=new THREE.Vector3(), d=new THREE.Vector3(), rc=new THREE.Raycaster();
@@ -333,23 +374,25 @@ menu.innerHTML=`<h3>Assets</h3>
 <label>Your racket</label><select id="selP"></select>
 <label id="lblA">AI racket</label><select id="selA"></select>
 <label>Table &amp; scene</label><select id="selT"></select>
+<label>Ball</label><select id="selB"></select>
 <button type="button" class="add" id="addBtn">＋ Add .glb</button>
 <button type="button" class="add" id="mainBtn" style="margin-top:8px">☰ Main menu</button>
-<p>Tap <b>Add .glb</b> or drag the file onto the page. The game tells what it is from the names inside:</p>
+<p>Models come from the <b>assets/racket</b>, <b>assets/ball</b> and <b>assets/table</b> folders. You can also tap <b>Add .glb</b> or drag a file onto the page. The game tells what it is from the names inside:</p>
 <p><b>Racket</b>: an object named <b>collision</b> (the hit area). Animations: Left, Right, Idle, Smash.</p>
 <p><b>Table scene</b>: objects named <b>board</b> and <b>net</b>. Everything else is flat background, not affected by light or ball.</p>
 <p>Added files stay until you reload the page.</p>
 <input type="file" id="fileIn" accept=".glb" multiple hidden>`;
 document.body.append(menuBtn,menu);
 for(const el of [menuBtn,menu])el.addEventListener('pointerdown',e=>e.stopPropagation());
-const selEl={P:$('selP'),A:$('selA'),T:$('selT')};
+const selEl={P:$('selP'),A:$('selA'),T:$('selT'),B:$('selB')};
 function refreshMenu(){
   const fill=(el,list,cur)=>{el.innerHTML=''; list.forEach((e,i)=>{const o=document.createElement('option'); o.value=i; o.textContent=e.name; el.appendChild(o);}); el.value=list.indexOf(cur);};
-  fill(selEl.P,LIB.racket,sel.P); fill(selEl.A,LIB.racket,sel.A); fill(selEl.T,LIB.table,sel.T);
+  fill(selEl.P,LIB.racket,sel.P); fill(selEl.A,LIB.racket,sel.A); fill(selEl.T,LIB.table,sel.T); fill(selEl.B,LIB.ball,sel.B);
 }
-selEl.P.addEventListener('change',()=>{setRacket('P',LIB.racket[selEl.P.value]);selEl.P.blur();});
-selEl.A.addEventListener('change',()=>{setRacket('A',LIB.racket[selEl.A.value]);selEl.A.blur();});
-selEl.T.addEventListener('change',()=>{setTable(LIB.table[selEl.T.value]);selEl.T.blur();});
+selEl.P.addEventListener('change',()=>{setRacket('P',LIB.racket[selEl.P.value]);saveSel();selEl.P.blur();});
+selEl.A.addEventListener('change',()=>{setRacket('A',LIB.racket[selEl.A.value]);saveSel();selEl.A.blur();});
+selEl.T.addEventListener('change',()=>{setTable(LIB.table[selEl.T.value]);saveSel();selEl.T.blur();});
+selEl.B.addEventListener('change',()=>{setBall(LIB.ball[selEl.B.value]);saveSel();selEl.B.blur();});
 const setMenu=o=>menu.classList.toggle('open',o);
 menuBtn.addEventListener('click',()=>{setMenu(!menu.classList.contains('open'));menuBtn.blur();});
 $('addBtn').addEventListener('click',()=>$('fileIn').click());
@@ -383,13 +426,14 @@ async function addFiles(files){
         toast(`Racket "${e.name}" added and set as your racket.`+(miss.length?` No animation named: ${miss.join(', ')}.`:''),miss.length?7000:4200);
       }else{
         if(mode!=='ai'){toast('Table scenes can only be changed from the main menu.');continue;}
-        const t=buildTable(src), e={name:uniq(LIB.table,label),root:t.root,M:t.M,buf}; LIB.table.push(e); setTable(e); refreshMenu();
+        const t=buildTable(src), e={name:uniq(LIB.table,label),root:t.root,M:t.M,flat:t.flat,buf}; LIB.table.push(e); setTable(e); refreshMenu();
         toast(`Table scene "${e.name}" added and in use.`);
       }
     }catch(err){console.error(err);toast(`${f.name}: couldn't read this file (${(err&&err.message)||err}).`,7000);}
   }
 }
 refreshMenu();
+if(LOAD_BAD.length)toast('Could not load: '+LOAD_BAD.join(', '),8000);
 
 // ---- input ----
 const ptr=new THREE.Vector2(0,-0.5), ray=new THREE.Raycaster(), plane=new THREE.Plane(new THREE.Vector3(0,1,0),-0.3);
@@ -601,7 +645,7 @@ function netTick(dt){
   if(mode==='ai'||!netLive)return;
   if((posT-=dt)<=0&&posCh&&posCh.readyState==='open'){posT=1/30; posCh.send(JSON.stringify(mir([P.g.position.x,P.g.position.y,P.g.position.z]).map(n=>Math.round(n*1000)/1000)));}
   if((pingT-=dt)<=0){pingT=1;netSend({t:'ping',ts:performance.now()});}
-  if(performance.now()-lastRx>6000)onNetClose(); // nothing heard for 6 s: the other device is gone
+  if(performance.now()-lastRx>12000)onNetClose(); // nothing heard for 12 s: the other device is gone
 }
 function applyRemoteHit(m){
   if(state==='serve'||state==='swing')state='play'; else if(state!=='play')return;
@@ -611,13 +655,14 @@ function applyRemoteHit(m){
   const lat=clamp(rtt/2000,0,0.25); ffwd=true; for(let t=0;t<lat;t+=0.004)step(0.004); ffwd=false; // catch up with the time the message spent travelling
 }
 function onHello(m){
-  const e=LIB.racket.find(r=>r.builtin&&r.name===m.racket)||LIB.racket[1]; // the other player's racket (built-in ones only)
+  const e=LIB.racket.find(r=>r.builtin&&r.name===m.racket)||LIB.racket[Math.min(1,LIB.racket.length-1)]; // the other player's racket (only if we have a file with the same name)
   if(sel.A!==e)setRacket('A',e,false);
   if(mode==='host')sendTable();
 }
-async function sendTable(){ // the host's table scene is used by both
+async function sendTable(force){ // the host's table scene is used by both
   const e=sel.T;
-  if(e.builtin||!e.buf){netSend({t:'table',kind:'default'});return;}
+  if(e.builtin&&!force){netSend({t:'table',kind:'lib',name:e.name});return;} // same file name in our folder? no need to send it
+  if(!e.buf){netSend({t:'table',kind:'lib',name:e.name});return;}
   netSend({t:'table',kind:'glb',size:e.buf.byteLength}); waitScreen('Sending your table scene…','');
   for(let o=0;o<e.buf.byteLength;o+=16384){
     while(evCh&&evCh.bufferedAmount>(1<<20))await new Promise(r=>setTimeout(r,15));
@@ -627,12 +672,12 @@ async function sendTable(){ // the host's table scene is used by both
   netSend({t:'tableEnd'});
 }
 async function finishTable(){
-  const parts=rx.parts; rx=null;
+  lastRx=performance.now(); const parts=rx.parts; rx=null;
   try{
     const src=await parseGLB(await new Blob(parts).arrayBuffer()), t=buildTable(src);
-    mpTable={name:'Host table',root:t.root,M:t.M}; LIB.table.push(mpTable); setTable(mpTable,false); refreshMenu();
+    mpTable={name:'Host table',root:t.root,M:t.M,flat:t.flat}; LIB.table.push(mpTable); setTable(mpTable,false); refreshMenu();
   }catch(err){console.error(err);toast("Couldn't load the host's table, using the default one.",6000);setTable(LIB.table[0],false);}
-  netSend({t:'ready'});
+  lastRx=performance.now(); netSend({t:'ready'});
 }
 function onEv(e){
   lastRx=performance.now();
@@ -643,9 +688,10 @@ function onEv(e){
     case 'pong': rtt=rtt*0.7+(performance.now()-m.ts)*0.3; break;
     case 'hello': onHello(m); break;
     case 'table':
-      if(m.kind==='default'){ if(sel.T!==LIB.table[0])setTable(LIB.table[0],false); netSend({t:'ready'}); }
+      if(m.kind==='lib'){ const e=LIB.table.find(t=>t.builtin&&t.name===m.name); if(e){ if(sel.T!==e)setTable(e,false); netSend({t:'ready'}); } else netSend({t:'needTable'}); }
       else rx={size:m.size,parts:[],got:0};
       break;
+    case 'needTable': if(mode==='host')sendTable(true); break;
     case 'tableEnd': if(rx)finishTable(); break;
     case 'ready': if(mode==='host'&&paused){netSend({t:'start'});enterMatch();resetMatch();} break;
     case 'start': if(mode==='guest')enterMatch(); break;
@@ -799,7 +845,7 @@ function leaveMatch(note,screen='home'){
   }
   mode='ai'; oppLabel='AI'; pendingWin=null; paused=true; score.P=score.A=0; server='P'; hud(); startServe(); setModeUI(); showStart(screen); if(note)toast(note,6000);
 }
-function enterMatch(){ clearTimeout(connT); hideStart(); camStop(); paused=false; setModeUI(); }
+function enterMatch(){ lastRx=performance.now(); clearTimeout(connT); hideStart(); camStop(); paused=false; setModeUI(); }
 function armTimeout(){ clearTimeout(connT); connT=setTimeout(()=>{ if(!netLive&&mode!=='ai')leaveMatch(netKind==='online'?"Couldn't connect. Some mobile networks block direct connections: try Wi-Fi on both devices.":"Couldn't connect in time. Both devices must be on the same Wi-Fi.",backScr()); },30000); }
 function failMP(e){ leaveMatch("Couldn't connect: "+((e&&e.message)||e),backScr()); }
 function showCode(title,code,role){
@@ -908,7 +954,7 @@ setModeUI(); showStart('home');
 const clock=new THREE.Clock();
 renderer.setAnimationLoop(()=>{
   const dt=Math.min(clock.getDelta(),0.05), N=Math.max(1,Math.ceil(dt/0.004)), h=dt/N;
-  if(paused){updateFx(dt);updateCam(dt);draw();return;} // start screen is open: the game stands still
+  if(paused){updateFx(dt);updateCam(dt);netTick(dt);draw();return;} // start screen is open: the game stands still
   const wants=[[P,playerWant(),9],[AI,mode==='ai'?aiWant():remoteTarget,mode==='ai'?AI_SPEED:40]];
   for(const [r] of wants){r.s0.copy(r.g.position);
     const vx=r.v.x*(r.flip?-1:1), still=Math.hypot(r.v.x,r.v.z)<0.1;
