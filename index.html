@@ -524,7 +524,8 @@ function aiWant(){
 // ================= multiplayer: LAN match over WebRTC (the game itself needs no server) =================
 // canonical coordinates = the host's. The guest sees the table from the other end, so x and z are flipped on its side (mir).
 const oppWord=()=>mode==='ai'?'AI':'your opponent';
-let rtt=60, lastRx=0, pc=null, evCh=null, posCh=null, posT=0, pingT=0, netLive=false, rx=null, saved=null, mpTable=null, connT=0;
+let netKind='lan', rtt=60, lastRx=0, pc=null, evCh=null, posCh=null, posT=0, pingT=0, netLive=false, rx=null, saved=null, mpTable=null, connT=0;
+const backScr=()=>netKind==='online'?'online':'lan';
 const graceMs=()=>clamp(rtt/2+80,100,350);
 const remoteTarget=new THREE.Vector3(0,0.35,-2.8);
 const mir=a=>mode==='guest'?[-a[0],a[1],-a[2]]:a;
@@ -596,8 +597,8 @@ function onEv(e){
     case 'bye': onNetClose(); break;
   }
 }
-function onNetOpen(){ clearTimeout(connT); netLive=true; lastRx=performance.now(); posT=0; pingT=0; waitScreen('Connected','Setting up the match…'); netSend({t:'hello',racket:sel.P.name}); }
-function onNetClose(){ if(mode==='ai')return; const was=netLive; netLive=false; leaveMatch(was?'The other player disconnected.':'Connection failed. Try again.','lan'); }
+function onNetOpen(){ fbCleanup(); clearTimeout(connT); netLive=true; lastRx=performance.now(); posT=0; pingT=0; waitScreen('Connected','Setting up the match…'); netSend({t:'hello',racket:sel.P.name}); }
+function onNetClose(){ if(mode==='ai')return; const was=netLive; netLive=false; leaveMatch(was?'The other player disconnected.':'Connection failed. Try again.',backScr()); }
 function closePC(){
   netLive=false; rx=null; clearTimeout(connT);
   for(const c of [evCh,posCh])try{if(c){c.onclose=c.onmessage=c.onopen=null;c.close();}}catch(e){}
@@ -611,8 +612,9 @@ function packCode(kind,desc){
   const lines=desc.sdp.split(/\r?\n/), first=re=>{for(const l of lines){const m=re.exec(l);if(m)return m;}return null;};
   const u=first(/^a=ice-ufrag:(\S+)/), w=first(/^a=ice-pwd:(\S+)/), f=first(/^a=fingerprint:sha-256 (\S+)/);
   if(!u||!w||!f)throw new Error('this browser made an unexpected connection description');
-  let c=[]; for(const l of lines){const m=/^a=candidate:\S+ 1 udp \d+ (\S+) (\d+) typ host/i.exec(l); if(m)c.push([m[1],m[2]]);}
+  const wan=netKind==='online'; let c=[]; for(const l of lines){const m=/^a=candidate:\S+ 1 udp \d+ (\S+) (\d+) typ (host|srflx)/i.exec(l); if(m&&(wan||m[3].toLowerCase()==='host'))c.push([m[1],m[2]]);}
   const v4=c.filter(x=>!x[0].includes(':')); if(v4.length)c=v4;
+  if(wan){const nl=c.filter(x=>!/\.local$/.test(x[0])); if(nl.length)c=nl;} c=c.slice(0,5); // online: public (STUN) address + LAN address
   if(!c.length)throw new Error('no network address found (is Wi-Fi on?)');
   return ['PP1',kind,u[1],w[1],b64u.enc(f[1].split(':').map(h=>parseInt(h,16))),c.map(x=>x[0]+'/'+x[1]).join(',')].join('|');
 }
@@ -631,7 +633,7 @@ function unpackCode(code,expect){
 }
 function makePC(){
   closePC();
-  pc=new RTCPeerConnection({iceServers:[]}); // same Wi-Fi: no STUN / TURN, nothing leaves the network
+  pc=new RTCPeerConnection({iceServers:netKind==='online'?[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]:[]}); // LAN: no STUN / TURN, nothing leaves the network
   evCh=pc.createDataChannel('ev',{negotiated:true,id:0});
   posCh=pc.createDataChannel('pos',{negotiated:true,id:1,ordered:false,maxRetransmits:0});
   evCh.binaryType='arraybuffer'; evCh.onopen=onNetOpen; evCh.onclose=onNetClose; evCh.onmessage=onEv;
@@ -691,6 +693,8 @@ stCss.textContent=`#start{position:fixed;inset:0;z-index:20;display:flex;align-i
 #start canvas{background:#fff;border-radius:10px;width:min(300px,78vw);height:auto;image-rendering:pixelated;margin:8px auto;display:block}
 #start video{width:min(340px,90vw);border-radius:12px;background:#000;max-height:44vh;object-fit:cover}
 #start textarea{width:100%;box-sizing:border-box;height:60px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.35);color:#fff;font:12px ui-monospace,monospace;padding:8px;resize:none;margin-top:6px}
+#start .code{font:800 44px ui-monospace,monospace;letter-spacing:.06em;margin:10px 0;background:rgba(0,0,0,.3);border-radius:12px;padding:12px}
+#start input{flex:1;min-width:0;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.35);color:#fff;font:700 18px ui-monospace,monospace;padding:10px;margin:6px 0}
 #start .row{display:flex;gap:8px}
 #start .row button{flex:1}`;
 document.head.appendChild(stCss);
@@ -698,7 +702,7 @@ const st=document.createElement('div'); st.id='start';
 st.innerHTML=`<div class="card" data-s="home"><h1>Ping Pong</h1>
 <button class="big" id="bAI">Play vs AI</button>
 <button class="big" id="bLAN">Multiplayer · LAN</button>
-<button class="big" id="bOn" disabled>Multiplayer · Online<i>coming soon</i></button></div>
+<button class="big" id="bOn">Multiplayer · Online</button></div>
 <div class="card" data-s="lan"><h2>LAN match</h2>
 <p>Two devices on the same Wi-Fi (or one phone's hotspot). No internet needed. One device hosts and the other joins: you show and scan each other's code.</p>
 <button class="big" id="bHost">Host a match</button><button class="big" id="bJoin">Join a match</button><button class="ghost" id="bLanBack">Back</button></div>
@@ -706,7 +710,12 @@ st.innerHTML=`<div class="card" data-s="home"><h1>Ping Pong</h1>
 <div class="card" data-s="show"><h2 id="showT"></h2><canvas id="qr"></canvas><p id="showP"></p><textarea id="showTxt" readonly></textarea>
 <div class="row"><button class="ghost" id="bCopy">Copy code</button><button class="big" id="bNext">Next: scan their reply</button></div><button class="ghost" id="bShowBack">Cancel</button></div>
 <div class="card" data-s="scan"><h2 id="scanT"></h2><video id="scanVid" playsinline muted></video><p id="scanP"></p>
-<textarea id="scanTxt" placeholder="…or paste their code here"></textarea><button class="big" id="bGo">Connect</button><button class="ghost" id="bScanBack">Cancel</button></div>`;
+<textarea id="scanTxt" placeholder="…or paste their code here"></textarea><button class="big" id="bGo">Connect</button><button class="ghost" id="bScanBack">Cancel</button></div>
+<div class="card" data-s="online"><h2>Online match</h2><p>Needs internet on both devices. Create a room, or pick one from the list.</p>
+<button class="big" id="bCreate">Create a room</button><button class="big" id="bJoinRoom">Join a room</button><button class="ghost" id="bOnBack">Back</button></div>
+<div class="card" data-s="hostroom"><h2>Your room</h2><div class="code" id="roomCode"></div><p>Waiting for a player to join…<br>Tell your friend this code, or they can pick it from the list.</p><button class="ghost" id="bHostCancel">Cancel</button></div>
+<div class="card" data-s="rooms"><h2>Open rooms</h2><div id="roomList"></div>
+<p>Or type a room code:</p><div class="row"><input id="codeIn" placeholder="sate-01" autocapitalize="off" autocomplete="off"><button class="big" id="bCodeGo" style="flex:0 0 90px">Join</button></div><button class="ghost" id="bRoomsBack">Back</button></div>`;
 document.body.appendChild(st);
 st.addEventListener('pointerdown',e=>e.stopPropagation());
 const showStart=n=>{st.style.display='flex';st.querySelectorAll('.card').forEach(c=>c.classList.toggle('on',c.dataset.s===n));};
@@ -718,6 +727,7 @@ function setModeUI(){
 }
 function beginMP(role){ saved={A:sel.A,T:sel.T}; mode=role; oppLabel='Opponent'; hud(); setModeUI(); }
 function leaveMatch(note,screen='home'){
+  fbCleanup();
   if(netLive)netSend({t:'bye'});
   closePC(); camStop();
   if(saved){
@@ -729,8 +739,8 @@ function leaveMatch(note,screen='home'){
   mode='ai'; oppLabel='AI'; pendingWin=null; paused=true; score.P=score.A=0; server='P'; hud(); startServe(); setModeUI(); showStart(screen); if(note)toast(note,6000);
 }
 function enterMatch(){ clearTimeout(connT); hideStart(); camStop(); paused=false; setModeUI(); }
-function armTimeout(){ clearTimeout(connT); connT=setTimeout(()=>{ if(!netLive&&mode!=='ai')leaveMatch("Couldn't connect in time. Both devices must be on the same Wi-Fi.",'lan'); },30000); }
-function failMP(e){ leaveMatch("Couldn't connect: "+((e&&e.message)||e),'lan'); }
+function armTimeout(){ clearTimeout(connT); connT=setTimeout(()=>{ if(!netLive&&mode!=='ai')leaveMatch(netKind==='online'?"Couldn't connect. Some mobile networks block direct connections: try Wi-Fi on both devices.":"Couldn't connect in time. Both devices must be on the same Wi-Fi.",backScr()); },30000); }
+function failMP(e){ leaveMatch("Couldn't connect: "+((e&&e.message)||e),backScr()); }
 function showCode(title,code,role){
   $('showT').textContent=title; drawQR($('qr'),code); $('showTxt').value=code; $('bNext').style.display=role==='host'?'':'none';
   $('showP').textContent=role==='host'?'The other device taps "Join a match" and scans this. Then tap Next and scan its reply.':'Show this reply to the host and keep this screen open. The match starts when the host has scanned it.';
@@ -751,12 +761,12 @@ async function onCode(code){
   }catch(err){ toast('That code did not work: '+((err&&err.message)||err),6000); openScan(scanRole,!!camStream); }
 }
 async function lanHost(){
-  beginMP('host'); waitScreen('Getting ready…','Allow the camera when asked: it scans the other device and helps the two devices find each other.');
+  netKind='lan'; beginMP('host'); waitScreen('Getting ready…','Allow the camera when asked: it scans the other device and helps the two devices find each other.');
   try{await camStart();}catch(e){}
   try{ showCode('Host: show this to the other device',await hostCreate(),'host'); }catch(e){ failMP(e); }
 }
 async function lanJoin(){
-  beginMP('guest'); waitScreen('Getting ready…','Allow the camera when asked.');
+  netKind='lan'; beginMP('guest'); waitScreen('Getting ready…','Allow the camera when asked.');
   let ok=true; try{await camStart();}catch(e){ok=false;}
   openScan('guest',ok);
 }
@@ -769,6 +779,68 @@ $('bShowBack').onclick=()=>leaveMatch(null,'lan'); $('bScanBack').onclick=()=>le
 $('bGo').onclick=()=>{const c=$('scanTxt').value.trim(); if(c){scanOn=false;onCode(c);}else toast('Paste the code first, or scan it with the camera.');};
 $('bCopy').onclick=()=>{const t=$('showTxt'); t.select(); (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).catch(()=>{try{document.execCommand('copy');}catch(e){}}); toast('Code copied');};
 $('mainBtn').onclick=()=>{setMenu(false);leaveMatch(null,'home');};
+// ---- Online: Firebase only keeps the room list + hands over the connection codes; the match itself is still device-to-device ----
+const FB_CONFIG={apiKey:"AIzaSyBNZt-DGF6BcX9q1TguajXJef1a7iJX7Iw",authDomain:"pingpong-88d6c.firebaseapp.com",databaseURL:"https://pingpong-88d6c-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"pingpong-88d6c",storageBucket:"pingpong-88d6c.firebasestorage.app",messagingSenderId:"1025665084528",appId:"1:1025665084528:web:ffcb64ca5ac7e339c218b5"};
+const FB_VER='10.12.2', ROOM_WORDS='sate diva jaja bola roti kopi mie nasi soto baso tahu teh es gula roda bima dewi kiki ayam jagung susu apel mawar bintang awan ombak'.split(' ');
+let FB=null, fbUnsubs=[], myRoom=null;
+const roomCode=()=>ROOM_WORDS[Math.floor(Math.random()*ROOM_WORDS.length)]+'-'+String(Math.floor(Math.random()*100)).padStart(2,'0');
+async function fbInit(){
+  if(FB)return FB;
+  const b=`https://www.gstatic.com/firebasejs/${FB_VER}/`;
+  const load=Promise.all([import(b+'firebase-app.js'),import(b+'firebase-auth.js'),import(b+'firebase-database.js')]);
+  const [A,Au,D]=await Promise.race([load,new Promise((_,no)=>setTimeout(()=>no(new Error('no internet connection')),15000))]);
+  const app=A.initializeApp(FB_CONFIG), auth=Au.getAuth(app);
+  await Au.signInAnonymously(auth);
+  FB={D,db:D.getDatabase(app),uid:auth.currentUser.uid}; return FB;
+}
+function fbCleanup(){
+  while(fbUnsubs.length)try{fbUnsubs.pop()();}catch(e){}
+  if(myRoom&&FB){FB.D.remove(myRoom).catch(()=>{});} myRoom=null;
+}
+async function onlineHost(){
+  netKind='online'; beginMP('host'); waitScreen('Creating your room…','');
+  try{
+    const f=await fbInit(), D=f.D, offer=await hostCreate();
+    let code,r; for(let i=0;i<10;i++){code=roomCode(); r=D.ref(f.db,'rooms/'+code); if(!(await D.get(r)).exists())break;}
+    myRoom=r; await D.onDisconnect(r).remove(); await D.set(r,{host:f.uid,offer,t:D.serverTimestamp()});
+    $('roomCode').textContent=code; showStart('hostroom'); let used=false;
+    fbUnsubs.push(D.onValue(D.ref(f.db,'rooms/'+code+'/answer'),async s=>{
+      const a=s.val(); if(!a||used)return; used=true;
+      try{ waitScreen('Player found','Connecting…'); await hostFinish(a); fbCleanup(); armTimeout(); }catch(e){failMP(e);}
+    }));
+  }catch(e){failMP(e);}
+}
+async function onlineList(){
+  netKind='online'; waitScreen('Looking for rooms…','');
+  try{
+    const f=await fbInit(), D=f.D; showStart('rooms');
+    fbUnsubs.push(D.onValue(D.ref(f.db,'rooms'),s=>renderRooms(s.val()||{})));
+  }catch(e){ showStart('online'); toast("Couldn't reach the server: "+((e&&e.message)||e),6000); }
+}
+function renderRooms(o){
+  const el=$('roomList'); el.innerHTML=''; const ids=Object.keys(o).filter(k=>o[k]&&o[k].offer&&!o[k].guest&&!o[k].answer);
+  if(!ids.length){el.innerHTML='<p>No open rooms yet. Ask a friend to create one.</p>';return;}
+  ids.forEach(id=>{const b=document.createElement('button');b.className='big';b.textContent=id;b.onclick=()=>joinRoom(id);el.appendChild(b);});
+}
+async function joinRoom(id){
+  id=String(id||'').trim().toLowerCase(); if(!id)return;
+  const f=FB, D=f.D; fbCleanup(); beginMP('guest'); waitScreen('Joining '+id+'…','');
+  try{
+    const r=D.ref(f.db,'rooms/'+id), s=await D.get(r); if(!s.exists()||!s.val().offer)throw new Error('that room no longer exists');
+    const tx=await D.runTransaction(D.ref(f.db,'rooms/'+id+'/guest'),cur=>cur===null?f.uid:undefined);
+    if(!tx.committed)throw new Error('someone else just joined that room');
+    const reply=await guestAccept(s.val().offer);
+    await D.set(D.ref(f.db,'rooms/'+id+'/answer'),reply);
+    waitScreen('Connecting…','Waiting for the host.'); armTimeout();
+  }catch(e){failMP(e);}
+}
+
+$('bOn').onclick=()=>showStart('online');
+$('bOnBack').onclick=()=>showStart('home');
+$('bCreate').onclick=onlineHost; $('bJoinRoom').onclick=onlineList;
+$('bHostCancel').onclick=()=>leaveMatch(null,'online');
+$('bRoomsBack').onclick=()=>{fbCleanup();showStart('online');};
+$('bCodeGo').onclick=()=>joinRoom($('codeIn').value);
 setModeUI(); showStart('home');
 
 // ---- loop ----
