@@ -68,18 +68,27 @@ const COMBO_SPEED=0.12, COMBO_MAX=12, COMBO_RESET_ON_SMASH=true; // each hit in 
 const SERVE_DELAY=0.3; // seconds into the smash swing when the serve ball launches
 const SPIN_K=0.5, CAM_SMOOTH=5; // ball spin strength (1 = true rolling speed), camera transition speed
 const BG=0x7b7f85, FLOOR=0x62666c; // gray surroundings
+// ---- look: colour + rim light (edit these) ----
+const COLOR_SAT=1.4, EXPOSURE=1.12;                 // picture saturation (1 = as before) and brightness
+const TABLE_BRIGHT=2.2;                             // lifts the built-in table's dark blue (1 = as before)
+const RIM_POW=2.3;                                  // how thin the rim is (higher = thinner edge)
+const RIM={table:[0x8fc8ff,1.0], racket:[0xfff0c8,1.1], ball:[0xffffff,0.8]}; // [rim colour, strength] per object
 const clamp=THREE.MathUtils.clamp, rnd=(a,b)=>a+Math.random()*(b-a);
 let mode='ai', paused=true, oppLabel='AI'; // mode: 'ai' | 'host' | 'guest' (LAN match); paused = start screen is open
 const msg=t=>$('msg').textContent=t, hud=()=>$('hud').textContent=`You ${score.P} : ${score.A} ${oppLabel}`;
 
+{ const k='color = ACESOutputMat * color;\n\treturn saturate( color );', C=THREE.ShaderChunk;
+  if(C.tonemapping_pars_fragment.includes(k))C.tonemapping_pars_fragment=C.tonemapping_pars_fragment.replace(k,'color = ACESOutputMat * color;\n\tfloat lum = dot( color, vec3( 0.2126, 0.7152, 0.0722 ) );\n\tcolor = mix( vec3( lum ), color, '+COLOR_SAT.toFixed(3)+' );\n\treturn saturate( color );');
+  else console.warn('tone mapper chunk not found: saturation not applied'); }
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-renderer.shadowMap.enabled=true; renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.shadowMap.enabled=true; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=EXPOSURE;
 document.body.appendChild(renderer.domElement);
 const scene=new THREE.Scene(); scene.background=new THREE.Color(BG); scene.fog=new THREE.Fog(BG,12,34);
 const cam=new THREE.PerspectiveCamera(55,1,0.1,600);
-scene.add(new THREE.HemisphereLight(0xffffff,0x8a8a8a,1.4));
-const sun=new THREE.DirectionalLight(0xffffff,2.2); sun.position.set(2,5,3); sun.castShadow=true;
+scene.add(new THREE.HemisphereLight(0xdcebff,0x8a8a8a,1.25)); // cool sky light
+const fill=new THREE.DirectionalLight(0x6aa8ff,0.5); fill.position.set(-4,2.5,-3); scene.add(fill); // cool fill from the far side
+const sun=new THREE.DirectionalLight(0xfff1dc,2.4); sun.position.set(2,5,3); sun.castShadow=true;
 Object.assign(sun.shadow.camera,{left:-4,right:4,top:4,bottom:-4,near:1,far:12});
 sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0005; scene.add(sun);
 let S=1; // zoom-out factor for narrow / portrait screens
@@ -106,6 +115,18 @@ function findNamed(root,test){ // the best-matching object that holds geometry (
 }
 const boxOf=(o)=>{o.updateWorldMatrix(true,true); return new THREE.Box3().setFromObject(o);};
 
+// rim light: a soft edge glow from each object's own normals (fresnel: strongest where the surface turns away from the camera)
+function rimify(root,[hex,str]){
+  root.traverse(o=>{ if(!o.isMesh)return;
+    for(const m of (Array.isArray(o.material)?o.material:[o.material])){
+      if(!m||!m.isMeshStandardMaterial||m.userData.rim)continue; m.userData.rim=1;
+      const u={rimCol:{value:new THREE.Color(hex)},rimStr:{value:str},rimPow:{value:RIM_POW}};
+      m.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,u);
+        sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nuniform vec3 rimCol;\nuniform float rimStr;\nuniform float rimPow;')
+          .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n  totalEmissiveRadiance += rimCol * pow( 1.0 - saturate( dot( normalize( normal ), normalize( vViewPosition ) ) ), rimPow ) * rimStr;'); };
+      m.customProgramCacheKey=()=>'rim'; m.needsUpdate=true;
+    }});
+}
 // ---- rackets ----
 let REF_H=0; // height of the built-in racket: every racket is scaled to the same size
 function prepRacket(src){
@@ -146,7 +167,7 @@ function mkRacket(owner,flip,src){
     c.position.add(new THREE.Vector3((so.x-c.scale.x)*ctr.x,(so.y-c.scale.y)*ctr.y,(so.z-c.scale.z)*ctr.z).applyQuaternion(c.quaternion));
   }
   c.visible=false; c.material.side=THREE.DoubleSide;
-  scene.add(g); const r={g,m,c,owner,flip,cur:'none',still:0,lean:0,sm:false,act:{},mix:new THREE.AnimationMixer(m),v:new THREE.Vector3(),s0:new THREE.Vector3()};
+  rimify(m,RIM.racket); scene.add(g); const r={g,m,c,owner,flip,cur:'none',still:0,lean:0,sm:false,act:{},mix:new THREE.AnimationMixer(m),v:new THREE.Vector3(),s0:new THREE.Vector3()};
   for(const k of src.animations)r.act[k.name.toLowerCase().replace('_move','')]=r.mix.clipAction(k);
   r.mix.addEventListener('finished',e=>{if(e.action===r.act.smash)r.sm=false;});
   for(const k of ['left','right'])if(r.act[k]){r.act[k].timeScale=0;r.act[k].setEffectiveWeight(0);r.act[k].play();} // scrubbed by cursor speed each frame
@@ -163,6 +184,7 @@ function measure(board,net){
 // built-in table (the reference every uploaded scene is fitted to)
 tableS.traverse(o=>{if(o.isMesh)o.castShadow=o.receiveShadow=true;});
 const DEFB=findNamed(tableS,isBoard), DEFN=findNamed(tableS,isNet);
+DEFB.traverse(o=>{ if(o.isMesh)for(const m of (Array.isArray(o.material)?o.material:[o.material]))if(m&&m.color&&m.map)m.color.multiplyScalar(TABLE_BRIGHT); });
 const DEF_BOX=boxOf(DEFB), DEF_C=DEF_BOX.getCenter(new THREE.Vector3()), DEF_LEN=DEF_BOX.getSize(new THREE.Vector3());
 const floor=new THREE.Mesh(new THREE.CircleGeometry(45,64),new THREE.MeshStandardMaterial({color:FLOOR,roughness:1}));
 floor.rotation.x=-Math.PI/2; floor.position.y=boxOf(tableS).min.y; floor.receiveShadow=true; scene.add(floor);
@@ -201,13 +223,13 @@ function setRacket(which,entry,reset=true){
 }
 function setTable(entry,reset=true){
   if(curTable)scene.remove(curTable.root);
-  curTable=entry; sel.T=entry; scene.add(entry.root); ({TOP,HX,HZ,NZ,NH,NTOP,NX}=entry.M); floor.visible=!!entry.builtin;
+  curTable=entry; sel.T=entry; rimify(entry.root,RIM.table); scene.add(entry.root); ({TOP,HX,HZ,NZ,NH,NTOP,NX}=entry.M); floor.visible=!!entry.builtin;
   if(reset)resetMatch();
 }
 function resetMatch(){if(mode==='guest')return; score.P=score.A=0;server='P';hud();startServe();}
 setRacket('P',sel.P,false); setRacket('A',sel.A,false); setTable(LIB.table[0],false);
 
-ball.scale.setScalar(R); scene.add(ball); ball.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+ball.scale.setScalar(R); rimify(ball,RIM.ball); scene.add(ball); ball.traverse(o=>{if(o.isMesh)o.castShadow=true;});
 
 // ---- state ----
 const p=ball.position, v=new THREE.Vector3(), tmp=new THREE.Vector3(), d=new THREE.Vector3(), rc=new THREE.Raycaster();
