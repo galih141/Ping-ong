@@ -68,11 +68,11 @@ const SERVE_DELAY=0.3; // seconds into the smash swing when the serve ball launc
 const SPIN_K=0.5, CAM_SMOOTH=5; // ball spin strength (1 = true rolling speed), camera transition speed
 const BG=0x7b7f85, FLOOR=0x62666c; // gray surroundings
 // ---- look: colour + rim light (edit these) ----
-const COLOR_SAT=1.3, EXPOSURE=1;                 // picture saturation (1 = as before) and brightness
-const TABLE_BRIGHT=1;                             // lifts the built-in table's dark blue (1 = as before)
+const COLOR_SAT=1.4, EXPOSURE=1.12;                 // picture saturation (1 = as before) and brightness
+const TABLE_BRIGHT=2.2;                             // lifts the built-in table's dark blue (1 = as before)
 const RIM_START=0.6, RIM_SOFT=0.07;                 // rim width (0.5 = wide ... 0.8 = thin line) and edge softness (smaller = sharper)
 const RIM={table:[0xffffff,1.6], racket:[0xffffff,1.7], ball:[0xffffff,1.4]}; // [rim colour, strength] per object
-const BLUR=0.005;                                    // background blur: max blur size as a fraction of the screen height (0 = off)
+const BLUR=0.02;                                    // background blur: max blur size as a fraction of the screen height (0 = off)
 const clamp=THREE.MathUtils.clamp, rnd=(a,b)=>a+Math.random()*(b-a);
 let mode='ai', paused=true, oppLabel='AI'; // mode: 'ai' | 'host' | 'guest' (LAN match); paused = start screen is open
 const msg=t=>$('msg').textContent=t, hud=()=>$('hud').textContent=`You ${score.P} : ${score.A} ${oppLabel}`;
@@ -168,6 +168,9 @@ try{
   const lists=await Promise.all(KINDS.map(listKind));
   for(let i=0;i<KINDS.length;i++){const r=await loadKind(KINDS[i],lists[i].names); LOADED[KINDS[i]]=r.out; LOAD_BAD.push(...r.bad);}
 }catch(e){msg('Failed to load assets: '+((e&&e.message)||e));await new Promise(()=>{});}
+// a ball file must be named ..._ball (fire_ball.glb), or contain an object named ..._ball (fire_ball, eraser_ball, dog_ball). Only that object is used.
+const isBallName=n=>/_ball$/i.test(n||''), ballObj=src=>findNamed(src,isBallName);
+LOADED.ball=LOADED.ball.filter(e=>{ if(ballObj(e.src)||isBallName(e.n.replace(/\.[^.]+$/,'')))return true; LOAD_BAD.push(`ball/${e.n} (must end with _ball)`); return false; });
 { const none=KINDS.filter(k=>!LOADED[k].length);
   if(none.length){msg('Nothing to play with yet. Put at least one .glb file in: '+none.map(k=>'assets/'+k+'/').join(', ')+(LOAD_BAD.length?'  (could not load: '+LOAD_BAD.join(', ')+')':''));await new Promise(()=>{});} }
 // ================= assets: built-ins + player uploads =================
@@ -282,7 +285,7 @@ const labelOf=n=>n.replace(/\.[^.]+$/,'');
 const LIB={racket:[],table:[],ball:[]};
 for(const e of LOADED.racket){prepRacket(e.src); LIB.racket.push({name:uniq(LIB.racket,labelOf(e.n)),src:e.src,buf:e.buf,builtin:true});}
 for(const e of LOADED.table){const t=buildTable(e.src); LIB.table.push({name:uniq(LIB.table,labelOf(e.n)),root:t.root,M:t.M,flat:t.flat,buf:e.buf,builtin:true});}
-for(const e of LOADED.ball)LIB.ball.push({name:uniq(LIB.ball,labelOf(e.n)),src:e.src,builtin:true});
+for(const e of LOADED.ball)LIB.ball.push({name:uniq(LIB.ball,labelOf(e.n)),src:e.src,obj:ballObj(e.src),builtin:true});
 const mem=(()=>{try{return JSON.parse(localStorage.getItem('pp.sel')||'{}');}catch(e){return {};}})(), pick=(l,n,d)=>l.find(e=>e.name===n)||d;
 // first file = the AI's racket, second = yours (until you choose and the game remembers it)
 const sel={A:pick(LIB.racket,mem.A,LIB.racket[0]),P:pick(LIB.racket,mem.P,LIB.racket[1]||LIB.racket[0]),T:pick(LIB.table,mem.T,LIB.table[0]),B:pick(LIB.ball,mem.B,LIB.ball[0])};
@@ -303,7 +306,8 @@ function resetMatch(){if(mode==='guest')return; score.P=score.A=0;server='P';hud
 const ball=new THREE.Group(); ball.scale.setScalar(R); scene.add(ball);
 function setBall(entry){ // any ball model: centred and sized to a radius of 1 (the group is scaled to the real radius R)
   if(ball.userData.m)ball.remove(ball.userData.m);
-  const m=entry.src.clone(true), bx=boxOf(m), c=bx.getCenter(new THREE.Vector3()), z=bx.getSize(new THREE.Vector3()), w=new THREE.Group();
+  let m; if(entry.obj){ entry.src.updateMatrixWorld(true); m=entry.obj.clone(true); entry.obj.matrixWorld.decompose(m.position,m.quaternion,m.scale); } else m=entry.src.clone(true);
+  const bx=boxOf(m), c=bx.getCenter(new THREE.Vector3()), z=bx.getSize(new THREE.Vector3()), w=new THREE.Group();
   m.position.sub(c); w.add(m); w.scale.setScalar(2/Math.max(z.x,z.y,z.z,1e-6));
   m.traverse(o=>{if(o.isMesh)o.castShadow=true;}); rimify(w,RIM.ball); ball.add(w); ball.userData.m=w; sel.B=entry;
 }
@@ -378,6 +382,7 @@ menu.innerHTML=`<h3>Assets</h3>
 <button type="button" class="add" id="addBtn">＋ Add .glb</button>
 <button type="button" class="add" id="mainBtn" style="margin-top:8px">☰ Main menu</button>
 <p>Models come from the <b>assets/racket</b>, <b>assets/ball</b> and <b>assets/table</b> folders. You can also tap <b>Add .glb</b> or drag a file onto the page. The game tells what it is from the names inside:</p>
+<p><b>Ball</b>: the file name or an object inside ends with <b>_ball</b> (fire_ball, dog_ball...).</p>
 <p><b>Racket</b>: an object named <b>collision</b> (the hit area). Animations: Left, Right, Idle, Smash.</p>
 <p><b>Table scene</b>: objects named <b>board</b> and <b>net</b>. Everything else is flat background, not affected by light or ball.</p>
 <p>Added files stay until you reload the page.</p>
@@ -403,13 +408,14 @@ addEventListener('dragleave',e=>{e.preventDefault();if(--dragN<=0){dragN=0;$('dr
 addEventListener('dragover',e=>e.preventDefault());
 addEventListener('drop',e=>{e.preventDefault();dragN=0;$('drop').style.display='none';addFiles([...(e.dataTransfer?.files||[])]);});
 function uniq(list,name){let n=name,i=2; while(list.some(e=>e.name===n))n=`${name} (${i++})`; return n;}
-function detect(src){
+function detect(src,label){
   let col=false,board=false,net=false;
   src.traverse(o=>{const n=o.name; if(isCol(n))col=true; if(isBoard(n))board=true; if(isNet(n))net=true;});
   if(board&&net)return {kind:'table'};
   if(col)return {kind:'racket'};
+  if(ballObj(src)||isBallName(label))return {kind:'ball'};
   if(board||net)return {kind:null,why:`the table scene needs both a "board" and a "net" object (found only ${board?'board':'net'})`};
-  return {kind:null,why:'a racket needs an object named "collision"; a table scene needs objects named "board" and "net"'};
+  return {kind:null,why:'a racket needs an object named "collision"; a table scene needs "board" and "net"; a ball needs a file or object name ending with _ball'};
 }
 async function addFiles(files){
   for(const f of files){
@@ -418,9 +424,10 @@ async function addFiles(files){
     try{
       const buf=await f.arrayBuffer();
       const src=await new Promise((ok,no)=>L.parse(buf,'',g=>{g.scene.animations=g.animations;ok(g.scene);},no));
-      const d=detect(src);
+      const d=detect(src,label);
       if(!d.kind){toast(`${f.name}: couldn't tell what this is. ${d.why}.`,7000);continue;}
-      if(d.kind==='racket'){
+      if(d.kind==='ball'){ const e={name:uniq(LIB.ball,label),src,obj:ballObj(src)}; LIB.ball.push(e); setBall(e); refreshMenu(); toast(`Ball "${e.name}" added and in use.`); }
+      else if(d.kind==='racket'){
         prepRacket(src); const e={name:uniq(LIB.racket,label),src}; LIB.racket.push(e); setRacket('P',e); refreshMenu();
         const miss=['left','right','idle','smash'].filter(k=>!src.animations.some(c=>c.name.toLowerCase().replace('_move','')===k));
         toast(`Racket "${e.name}" added and set as your racket.`+(miss.length?` No animation named: ${miss.join(', ')}.`:''),miss.length?7000:4200);
