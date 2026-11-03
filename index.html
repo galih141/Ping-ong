@@ -542,7 +542,7 @@ addEventListener('pointerdown',e=>{if((e.target.closest&&e.target.closest('.ui,#
   bA.addEventListener('pointerup',end); bA.addEventListener('pointercancel',end);
   let t0=performance.now();
   (function loop(t){ const dt=Math.min(0.1,(t-t0)/1000); t0=t;
-    if(padOn){const m=Math.hypot(sv.x,sv.y); if(m>0.12){const k=(m-0.12)/0.88, g=Math.pow(k,1.2)/m; ptr.x=clamp(ptr.x+sv.x*g*2.4*dt,-0.9,0.9); ptr.y=clamp(ptr.y-sv.y*g*1.8*dt,-0.8,0.6);}}
+    if(padOn){const m=Math.hypot(sv.x,sv.y); if(m>0.12){const k=(m-0.12)/0.88, g=Math.pow(k,1.2)/m; ptr.x=clamp(ptr.x+sv.x*g*1.8*dt,-0.9,0.9); ptr.y=clamp(ptr.y-sv.y*g*1.8*dt,-0.8,0.6);}}
     requestAnimationFrame(loop); })(t0);
 }
 // ---- "emergency" screen: from the red combo tier a red glow rises from the bottom and the edges pulse dark; the higher the combo, the faster it pulses and fades
