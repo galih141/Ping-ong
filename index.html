@@ -187,7 +187,8 @@ LOADED.ball=LOADED.ball.filter(e=>{ if(ballObj(e.src)||isBallName(e.n.replace(/\
 // ================= interface: built from the SVG pieces of the design (ui/pieces.json) =================
 const UIP=JSON.parse($('uiPieces').textContent);
 const AI_NAMES={medium:'Easy',expert:'Medium',perfect:'Infinite'}; // names shown for the three AI levels (the percentages are in AI_LEVELS)
-const COMBO_NAMES=['','SINGLE','DOUBLE','TRIPLE','QUAD','PENTA','HEXA','SEPTA','OCTA','NONA','DECA','ULTRA','MAX'];
+const COMBO_NAMES=['','HIT','COMBO','TRIPLE','ULTRA','GIGA','HYPER','EXTRA','MONSTER','MAX']; // 10 and more: 'SPARE ME MAH LORD' (keeps counting)
+const comboColor=n=>n>=6?'#E5283C':n>=3?'#F58A1F':'#236ADC'; // blue -> orange -> red
 function mk(par,name,{tag='div',dx=0,dy=0,id,cls=''}={}){
   const q=UIP[name], e=document.createElement(tag); if(tag==='button')e.type='button';
   e.className='pc '+cls; if(id)e.id=id;
@@ -396,7 +397,11 @@ let combo=0, smashPow=0, shake=0, gB=G; // gB = gravity on the ball right now (a
 function setCombo(n){
   const prev=combo; combo=n; const el=UI.combo;
   if(n<=0){el.style.display='none';return;}
-  el.style.display=''; setText(el,'cn',String(n)); setText(el,'cname',COMBO_NAMES[Math.min(n,COMBO_MAX)]||'MAX');
+  el.style.display=''; setText(el,'cn',String(n));
+  const nm=el.querySelector('[data-k="cname"]'), big=n>=10;
+  nm.innerHTML=big?'<tspan x="0" y="22">SPARE ME</tspan><tspan x="0" y="58">MAH LORD</tspan>':`<tspan x="0" y="33.75">${COMBO_NAMES[n]||'MAX'}</tspan>`;
+  nm.setAttribute('font-size',big?'36':'48'); nm.setAttribute('stroke-width',big?'12':'15');
+  el.querySelectorAll('text').forEach(t=>t.setAttribute('stroke',comboColor(n)));
   const [a,b,c]=UI.cxT; UI.cx.setAttribute('transform',`translate(${a+(n>=10?62:0)} ${b}) rotate(${c})`); // the "x" moves right for two digits
   if(n>prev){el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');}
 }
