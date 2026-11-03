@@ -399,7 +399,7 @@ function setCombo(n){
   if(n<=0){el.style.display='none';return;}
   el.style.display=''; setText(el,'cn',String(n));
   const nm=el.querySelector('[data-k="cname"]'), big=n>=10;
-  nm.innerHTML=big?'<tspan x="0" y="22">SPARE ME</tspan><tspan x="0" y="58">MAH LORD</tspan>':`<tspan x="0" y="33.75">${COMBO_NAMES[n]||'MAX'}</tspan>`;
+  nm.innerHTML=big?'<tspan x="0" y="22">SUPPER</tspan><tspan x="0" y="58">MAX!</tspan>':`<tspan x="0" y="33.75">${COMBO_NAMES[n]||'MAX'}</tspan>`;
   nm.setAttribute('font-size',big?'36':'48'); nm.setAttribute('stroke-width',big?'12':'15');
   el.querySelectorAll('text').forEach(t=>t.setAttribute('stroke',comboColor(n)));
   const [a,b,c]=UI.cxT; UI.cx.setAttribute('transform',`translate(${a+(n>=10?62:0)} ${b}) rotate(${c})`); // the "x" moves right for two digits
