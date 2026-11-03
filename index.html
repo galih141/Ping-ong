@@ -97,7 +97,8 @@ const COLOR_SAT=1.3, EXPOSURE=1;                 // picture saturation (1 = as b
 const TABLE_BRIGHT=1;                               // lifts the built-in table's dark blue (1 = as before)
 const RIM_START=0.6, RIM_SOFT=0.1;                  // rim width (0.5 = wide ... 0.8 = thin line) and edge softness (smaller = sharper)
 const RIM={table:[0xffffff,1.6], racket:[0xffffff,1.7], ball:[0xffffff,1.4]}; // [rim colour, strength] per object
-const FOCAL=1.5;                                   // focal length: 1 = as before, higher = flatter perspective (the camera moves back to keep the same framing)
+const FOCAL=2;                                     // lens: 1 = wide (strong perspective), higher = longer lens (flatter perspective)
+const CAM_DIST=1.5;                                // camera distance: 1 = as before, higher = farther away (lower = closer, subject looks bigger)
 const BLUR=0.003;                                   // background blur: max blur size as a fraction of the screen height (0 = off)
 const clamp=THREE.MathUtils.clamp, rnd=(a,b)=>a+Math.random()*(b-a);
 let mode='ai', paused=true, oppLabel='AI'; // mode: 'ai' | 'host' | 'guest' (LAN match); paused = start screen is open
@@ -112,7 +113,7 @@ const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=EXPOSURE;
 document.body.appendChild(renderer.domElement);
-const scene=new THREE.Scene(); scene.background=new THREE.Color(BG); scene.fog=new THREE.Fog(BG,12*FOCAL,34*FOCAL);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(BG); scene.fog=new THREE.Fog(BG,12*CAM_DIST,34*CAM_DIST);
 const cam=new THREE.PerspectiveCamera(2*Math.atan(Math.tan(55*Math.PI/360)/FOCAL)*180/Math.PI,1,0.1,600);
 scene.add(new THREE.HemisphereLight(0xdcebff,0x8a8a8a,1.25)); // cool sky light
 const fill=new THREE.DirectionalLight(0x6aa8ff,0.5); fill.position.set(-4,2.5,-3); scene.add(fill); // cool fill from the far side
@@ -435,7 +436,7 @@ const shakeOff=new THREE.Vector3();
 function updateCam(dt,snap){
   cam.position.sub(shakeOff);
   VIEWS[view].get(camT,follow);
-  camT.pos.sub(camT.look).multiplyScalar(FOCAL).add(camT.look); camT.fov=2*Math.atan(Math.tan(camT.fov*Math.PI/360)/FOCAL)*180/Math.PI; // longer lens
+  camT.pos.sub(camT.look).multiplyScalar(CAM_DIST).add(camT.look); camT.fov=2*Math.atan(Math.tan(camT.fov*Math.PI/360)/FOCAL)*180/Math.PI; // longer lens
   const k=snap?1:1-Math.exp(-dt*CAM_SMOOTH);
   cam.position.lerp(camT.pos,k); camLook.lerp(camT.look,k); cam.fov+=(camT.fov-cam.fov)*k;
   if(shake>0.0005){shakeOff.set((Math.random()-.5)*shake,(Math.random()-.5)*shake,(Math.random()-.5)*shake);shake*=Math.exp(-dt*9);}else shakeOff.set(0,0,0);
