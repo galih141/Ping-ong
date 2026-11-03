@@ -215,7 +215,7 @@ function mk(par,name,{tag='div',dx=0,dy=0,id,cls=''}={}){
 const setText=(el,k,v)=>{const t=el.querySelector('[data-k="'+k+'"]'); if(!t)return null; (t.querySelector('tspan')||t).textContent=v; return t;};
 function uiScale(){
   const w=innerWidth,h=innerHeight,r=document.documentElement;
-  r.style.setProperty('--u',clamp(Math.min(h/1080*1.45,w/1920*2.1),0.42,1).toFixed(3));   // size of the in-game interface
+  r.style.setProperty('--u',clamp(Math.min(h/1080*1.45,w/1920*2.1),0.42,0.7).toFixed(3));   // size of the in-game interface
   r.style.setProperty('--m',Math.min(w*0.96/742,h*0.98/1048,1.15).toFixed(3));              // size of the main menu
   r.classList.toggle('portrait',w<h*0.85);
 }
@@ -542,7 +542,7 @@ addEventListener('pointerdown',e=>{if((e.target.closest&&e.target.closest('.ui,#
   bA.addEventListener('pointerup',end); bA.addEventListener('pointercancel',end);
   let t0=performance.now();
   (function loop(t){ const dt=Math.min(0.1,(t-t0)/1000); t0=t;
-    if(padOn){const m=Math.hypot(sv.x,sv.y); if(m>0.12){const k=(m-0.12)/0.88, g=Math.pow(k,1.2)/m; ptr.x=clamp(ptr.x+sv.x*g*1.8*dt,-0.9,0.9); ptr.y=clamp(ptr.y-sv.y*g*1.8*dt,-0.8,0.6);}}
+    if(padOn){const m=Math.hypot(sv.x,sv.y); if(m>0.12){const k=(m-0.12)/0.88, g=Math.pow(k,1.2)/m; ptr.x=clamp(ptr.x+sv.x*g*1*dt,-0.9,0.9); ptr.y=clamp(ptr.y-sv.y*g*1*dt,-0.8,0.6);}}
     requestAnimationFrame(loop); })(t0);
 }
 // ---- "emergency" screen: from the red combo tier a red glow rises from the bottom and the edges pulse dark; the higher the combo, the faster it pulses and fades
