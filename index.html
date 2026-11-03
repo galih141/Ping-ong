@@ -28,6 +28,7 @@ button.pc:active{transform:scale(.94)}
 .opt rect{pointer-events:all}
 .opt text{fill:#236ADC;font:400 20px 'Luckiest Guy',sans-serif;pointer-events:none}
 .opt.on text{fill:#fff;stroke:#236ADC;stroke-width:15px;paint-order:stroke;stroke-linejoin:round}
+#mutebtn .offx{display:none}#mutebtn.off .on{display:none}#mutebtn.off .offx{display:block}
 #combo.pop svg{animation:pop .26s ease-out}
 @keyframes pop{0%{transform:scale(1.3)}100%{transform:scale(1)}}
 #combo svg{transform-origin:55% 50%}
@@ -187,7 +188,7 @@ LOADED.ball=LOADED.ball.filter(e=>{ if(ballObj(e.src)||isBallName(e.n.replace(/\
 // ================= interface: built from the SVG pieces of the design (ui/pieces.json) =================
 const UIP=JSON.parse($('uiPieces').textContent);
 const AI_NAMES={medium:'Easy',expert:'Medium',perfect:'Infinite'}; // names shown for the three AI levels (the percentages are in AI_LEVELS)
-const COMBO_NAMES=['','HIT','COMBO','TRIPLE','ULTRA','GIGA','HYPER','EXTRA','MONSTER','MAX']; // 10 and more: 'SUPER MAX!' (keeps counting)
+const COMBO_NAMES=['','HIT','COMBO','TRIPLE','ULTRA','GIGA','HYPER','EXTRA','MONSTER','MAX']; // 10 and more: 'SPARE ME MAH LORD' (keeps counting)
 const comboColor=n=>n>=6?'#E5283C':n>=3?'#F58A1F':'#236ADC'; // blue -> orange -> red
 function mk(par,name,{tag='div',dx=0,dy=0,id,cls=''}={}){
   const q=UIP[name], e=document.createElement(tag); if(tag==='button')e.type='button';
@@ -247,6 +248,72 @@ function uiMsg(t){
 const togglePnl=p=>{p.style.display=p.style.display==='none'?'':'none';};
 UI.camBtn.addEventListener('click',()=>{togglePnl(UI.pnlC);UI.camBtn.blur();}); UI.lvlBtn.addEventListener('click',()=>{togglePnl(UI.pnlL);UI.lvlBtn.blur();});
 
+// ================= sound: music per table (assets/music/<table name>.mp3) + sound effects (built in; optional files assets/sfx/<name>.mp3 replace them) =================
+const MUSIC_VOL=0.35;   // music volume (0 - 1)
+const SFX_VOL=0.8;      // sound effects volume (0 - 1)
+const SND={muted:false,unlocked:false}; try{SND.muted=localStorage.getItem('pp.mute')==='1';}catch(e){}
+let AC=null, sfxGain=null, noiseBuf=null; const BUF={}, lastPlay={};
+const SFX_FILES=['hit','smash','bounce','net','whoosh','point','lose','combo','win']; // names you can drop into assets/sfx/ (.mp3 / .ogg)
+function audioInit(){
+  if(AC)return;
+  try{
+    AC=new (window.AudioContext||window.webkitAudioContext)(); sfxGain=AC.createGain(); sfxGain.gain.value=SND.muted?0:SFX_VOL; sfxGain.connect(AC.destination);
+    noiseBuf=AC.createBuffer(1,AC.sampleRate,AC.sampleRate); const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    for(const n of SFX_FILES)(async()=>{ for(const ext of ['mp3','ogg']){ try{ const r=await fetch(`assets/sfx/${n}.${ext}`); if(!r.ok)continue; BUF[n]=await AC.decodeAudioData(await r.arrayBuffer()); return; }catch(e){} } })();
+  }catch(e){AC=null;}
+}
+function tone(f,dur,type='sine',vol=0.4,o={}){ // one short note
+  if(!AC||SND.muted)return; const t=AC.currentTime+(o.delay||0), os=AC.createOscillator(), g=AC.createGain();
+  os.type=type; os.frequency.setValueAtTime(f,t); if(o.to)os.frequency.exponentialRampToValueAtTime(o.to,t+dur);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.005); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  os.connect(g); g.connect(sfxGain); os.start(t); os.stop(t+dur+0.02);
+}
+function noise(dur,vol,type='bandpass',f0=1500,f1=null,o={}){ // short burst of filtered noise
+  if(!AC||SND.muted||!noiseBuf)return; const t=AC.currentTime+(o.delay||0), sr=AC.createBufferSource(), fl=AC.createBiquadFilter(), g=AC.createGain();
+  sr.buffer=noiseBuf; fl.type=type; fl.frequency.setValueAtTime(f0,t); if(f1)fl.frequency.exponentialRampToValueAtTime(f1,t+dur); fl.Q.value=o.q||1;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.004); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  sr.connect(fl); fl.connect(g); g.connect(sfxGain); sr.start(t,Math.random()*0.5); sr.stop(t+dur+0.02);
+}
+function playBuf(n,vol=1,rate=1){ if(!AC||SND.muted||!BUF[n])return false; const sr=AC.createBufferSource(), g=AC.createGain(); sr.buffer=BUF[n]; sr.playbackRate.value=rate; g.gain.value=vol; sr.connect(g); g.connect(sfxGain); sr.start(); return true; }
+const gate=(n,ms=45)=>{const t=performance.now(); if(t-(lastPlay[n]||0)<ms)return false; lastPlay[n]=t; return true;};
+const jit=()=>0.92+Math.random()*0.16;
+const sfx={
+  hit(big,pw=0){ if(!gate('hit'))return;
+    if(big&&playBuf('smash',1))return; if(!big&&playBuf('hit',1,jit()))return;
+    tone(1150*jit(),0.06,'triangle',0.45,{to:650}); noise(0.05,0.3,'highpass',3200);
+    if(big){ tone(140,0.3,'sine',0.8,{to:45}); noise(0.28,0.45,'lowpass',3000,250); tone(300,0.12,'sawtooth',0.2,{to:90}); } },
+  bounce(){ if(!gate('bounce'))return; if(playBuf('bounce',1,jit()))return; tone(430*jit(),0.07,'sine',0.5,{to:290}); noise(0.035,0.18,'bandpass',1900); },
+  net(){ if(!gate('net',120))return; if(playBuf('net',1))return; noise(0.14,0.32,'lowpass',1000,300); tone(190,0.12,'sine',0.22,{to:120}); },
+  whoosh(v=1){ if(!gate('whoosh',120))return; if(playBuf('whoosh',v))return; noise(0.28,0.22*v,'bandpass',450,2600,{q:2}); },
+  point(mine){ if(mine){ if(playBuf('point',1))return; [523,659,784].forEach((f,i)=>tone(f,0.16,'triangle',0.3,{delay:i*0.09})); }
+               else { if(playBuf('lose',1))return; [392,330].forEach((f,i)=>tone(f,0.2,'sawtooth',0.12,{delay:i*0.12,to:f*0.97})); } },
+  combo(n){ if(n<2||!gate('combo',60))return; if(playBuf('combo',0.8,Math.pow(1.06,Math.min(n,14)))) return;
+    const f=520*Math.pow(1.0595,Math.min(n,14)*2); tone(f,0.13,'square',0.14,{to:f*1.02}); if(n>=6)tone(f*2,0.16,'triangle',0.12,{delay:0.05}); },
+  over(won){ if(playBuf(won?'win':'lose',1))return; (won?[523,659,784,1047]:[392,349,311,262]).forEach((f,i)=>tone(f,0.28,won?'triangle':'sawtooth',won?0.3:0.12,{delay:i*0.14})); },
+};
+const music={a:null,name:null,list:[],i:0,
+  set(name){ name=name||'default'; if(name===this.name&&this.a)return; this.name=name; this.stopOld(); this.list=[]; const bn=[name,name.toLowerCase(),'default'].filter((v,i,a)=>a.indexOf(v)===i);
+    for(const b of bn)for(const e of ['mp3','ogg','m4a'])this.list.push(`assets/music/${encodeURIComponent(b)}.${e}`); this.i=0; this.next(); },
+  stopOld(){ const o=this.a; if(!o)return; this.a=null; this.fade(o,0,500,()=>{o.pause();o.removeAttribute('src');o.load();}); },
+  next(){ if(this.i>=this.list.length){this.a=null;return;} const a=new Audio(); this.a=a; a.loop=true; a.preload='auto'; a.volume=0; a.muted=SND.muted;
+    a.addEventListener('error',()=>{ if(this.a===a){this.i++;this.next();} });
+    a.addEventListener('canplay',()=>{ if(this.a===a&&SND.unlocked)this.go(); },{once:true});
+    a.src=this.list[this.i++]; },
+  go(){ const a=this.a; if(!a||!a.paused)return; a.play().then(()=>this.fade(a,MUSIC_VOL,1500)).catch(()=>{}); },
+  fade(a,to,ms,cb){ const v0=a.volume, t0=performance.now(); (function st(){ const k=Math.min(1,(performance.now()-t0)/ms); a.volume=Math.max(0,Math.min(1,v0+(to-v0)*k)); if(k<1)requestAnimationFrame(st); else if(cb)cb(); })(); },
+};
+function unlockAudio(){ if(!SND.unlocked){SND.unlocked=true;} audioInit(); if(AC&&AC.state==='suspended')AC.resume(); music.go(); }
+for(const ev of ['pointerdown','keydown','touchend'])addEventListener(ev,unlockAudio,{capture:true,passive:true});
+document.addEventListener('visibilitychange',()=>{ const a=music.a; if(!a)return; if(document.hidden)a.pause(); else if(SND.unlocked)music.go(); });
+function setMute(m){ SND.muted=m; try{localStorage.setItem('pp.mute',m?'1':'0');}catch(e){} if(sfxGain)sfxGain.gain.value=m?0:SFX_VOL; if(music.a)music.a.muted=m; if(UI.muteBtn){UI.muteBtn.classList.toggle('off',m);} }
+{ // mute button, next to the fullscreen button (same style)
+  const q=UIP.fullscreen, mq=UIP.menu, x=q.x+q.w+(q.x-(mq.x+mq.w));
+  const b=document.createElement('button'); b.type='button'; b.className='pc'; b.id='mutebtn'; b.style.cssText=`left:${x}px;top:${q.y}px;width:${q.w}px;height:${q.h}px`;
+  b.innerHTML=`<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="${q.x} ${q.y} ${q.w} ${q.h}" width="${q.w}" height="${q.h}"><path d="M252.392 24.1475L197.632 22L186 44.9061L192.263 87.8552L254.182 89.1078L259.013 65.4859V49.9169L252.392 24.1475Z" fill="white"/><g transform="translate(-4 0)"><path d="M206 47H216L230 36V76L216 65H206Z" fill="#FFB121" stroke="#FFB121" stroke-width="3" stroke-linejoin="round"/><g class="on" stroke="#FFB121" stroke-width="5" stroke-linecap="round" fill="none"><path d="M238 46Q245 56 238 66"/><path d="M244 38Q257 56 244 74"/></g><g class="offx" stroke="#E63E3E" stroke-width="5" stroke-linecap="round" fill="none"><path d="M238 46L254 66M254 46L238 66"/></g></g></svg>`;
+  UI.muteBtn=b; document.getElementById('uiL').appendChild(b);
+  b.addEventListener('click',()=>{ setMute(!SND.muted); b.blur(); });
+  setMute(SND.muted);
+}
 // ================= assets: built-ins + player uploads =================
 // Racket .glb : an object named "collision" (invisible hit area). Animations: Left / Right / Idle / Smash (same names as the built-in rackets).
 // Table scene .glb : objects named "board" and "net" (lit, with shadows). Everything else = flat background, not affected by light, ball or anything.
@@ -373,7 +440,7 @@ function setRacket(which,entry,reset=true){
 }
 function setTable(entry,reset=true){
   if(curTable)scene.remove(curTable.root);
-  curTable=entry; sel.T=entry; rimify(entry.root,RIM.table); scene.add(entry.root); ({TOP,HX,HZ,NZ,NH,NTOP,NX}=entry.M); floor.visible=!entry.flat;
+  curTable=entry; sel.T=entry; music.set(entry.name); rimify(entry.root,RIM.table); scene.add(entry.root); ({TOP,HX,HZ,NZ,NH,NTOP,NX}=entry.M); floor.visible=!entry.flat;
   if(reset)resetMatch();
 }
 function resetMatch(){if(mode==='guest')return; score.P=score.A=0;server='P';hud();startServe();}
@@ -395,11 +462,11 @@ const score={P:0,A:0}; let state='serve', server='P', lastHit=null, bouncedOpp=f
 let pendingWin=null, ffwd=false; // pendingWin: host waits a moment before giving a point (the other player may still be returning the ball)
 let combo=0, smashPow=0, shake=0, gB=G; // gB = gravity on the ball right now (a blast makes it heavier until it lands)
 function setCombo(n){
-  const prev=combo; combo=n; const el=UI.combo;
+  const prev=combo; combo=n; if(n>prev)sfx.combo(n); const el=UI.combo;
   if(n<=0){el.style.display='none';return;}
   el.style.display=''; setText(el,'cn',String(n));
   const nm=el.querySelector('[data-k="cname"]'), big=n>=10;
-  nm.innerHTML=big?'<tspan x="0" y="22">SUPPER</tspan><tspan x="0" y="58">MAX!</tspan>':`<tspan x="0" y="33.75">${COMBO_NAMES[n]||'MAX'}</tspan>`;
+  nm.innerHTML=big?'<tspan x="0" y="22">SPARE ME</tspan><tspan x="0" y="58">MAH LORD</tspan>':`<tspan x="0" y="33.75">${COMBO_NAMES[n]||'MAX'}</tspan>`;
   nm.setAttribute('font-size',big?'36':'48'); nm.setAttribute('stroke-width',big?'12':'15');
   el.querySelectorAll('text').forEach(t=>t.setAttribute('stroke',comboColor(n)));
   const [a,b,c]=UI.cxT; UI.cx.setAttribute('transform',`translate(${a+(n>=10?62:0)} ${b}) rotate(${c})`); // the "x" moves right for two digits
@@ -504,7 +571,7 @@ function tap(){
 }
 addEventListener('pointermove',setPtr);
 addEventListener('contextmenu',e=>e.preventDefault());
-function smashR(r){const a=r.act.smash;if(!a||r.sm)return false;r.sm=true;a.reset();a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=false;a.play();return true;}
+function smashR(r){const a=r.act.smash;if(!a||r.sm)return false;r.sm=true;sfx.whoosh(r===P?1:0.6);a.reset();a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=false;a.play();return true;}
 const smash=()=>{if(paused)return; if(smashR(P))netSend({t:'sw'});};
 addEventListener('pointerdown',e=>{if(e.target.closest&&e.target.closest('.ui,#start'))return; setPtr(e);if(e.button===0&&state==='play')smash();else tap();});
 addEventListener('keydown',e=>{
@@ -544,7 +611,7 @@ const ringGeo=new THREE.RingGeometry(0.82,1,48), quadGeo=new THREE.PlaneGeometry
 const fxMat=(c,o=1)=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o,depthWrite:false,side:THREE.DoubleSide,fog:false});
 function addFx(mesh,life,update){mesh.renderOrder=10;scene.add(mesh);FX.push({mesh,life,t:0,update});}
 function face(m,ang){m.quaternion.copy(cam.quaternion).multiply(fq.setFromAxisAngle(zAx,ang));}
-function hitFx(pos,big,pw=0){
+function hitFx(pos,big,pw=0){ sfx.hit(big,pw);
   cam.updateMatrixWorld(); cam.matrixWorld.extractBasis(cR,cU,cF);
   const dk=clamp(cam.position.distanceTo(pos)/4.5,0.4,1.4), s=(big?1.7:1)*(1+pw*0.45)*dk, c0=pos.clone(); // dk: keeps the effect a similar size on screen when the hit is close to the camera
   const ring=new THREE.Mesh(ringGeo,fxMat(big?0xff8a2a:0xffffff,0.95)); ring.position.copy(c0);
@@ -568,6 +635,7 @@ function burstFx(c0,pw=0,dk=1){ // smash: radial speed lines around the impact (
   }
 }
 function bounceFx(x,z){ // soft ripple on the table
+  sfx.bounce();
   const m=new THREE.Mesh(ringGeo,fxMat(0xffffff,0.55)); m.position.set(x,TOP+0.004,z); m.rotation.x=-Math.PI/2;
   addFx(m,0.35,(f,k)=>{f.mesh.scale.setScalar(R*(0.8+k*3.2));f.mesh.material.opacity=0.55*(1-k);});
 }
@@ -603,7 +671,7 @@ function win(w){
   award(w);
 }
 function award(w){
-  pendingWin=null; setCombo(0); score[w]++; hud(); state='point'; timer=1.4; msg(w==='P'?'Point for you!':`Point for ${oppWord()}`);
+  sfx.point(w==='P'); pendingWin=null; setCombo(0); score[w]++; hud(); state='point'; timer=1.4; msg(w==='P'?'Point for you!':`Point for ${oppWord()}`);
   if(mode==='host')netSend({t:'point',w:w==='P'?'H':'G',sc:{H:score.P,G:score.A}});
 }
 function bounce(side){
@@ -645,7 +713,7 @@ function step(h){
   if(state!=='play'&&state!=='point')return;
   const pz=p.z; v.y-=gB*h; p.addScaledVector(v,h);
   if(v.y<0&&p.y-R<TOP&&p.y>TOP-0.12&&Math.abs(p.x)<HX&&Math.abs(p.z)<HZ){p.y=TOP+R;v.y*=-E;v.x*=0.99;v.z*=0.99;gB=G;if(-v.y>1.5)bounceFx(p.x,p.z);bounce(p.z>0?'P':'A');}
-  if(Math.abs(p.x)<NX&&p.y<NTOP+R*0.3&&p.y>TOP-0.1&&Math.abs(p.z-NZ)<R+NH){p.z=NZ+(pz>NZ?1:-1)*(R+NH);v.z*=-0.25;v.x*=0.6;}
+  if(Math.abs(p.x)<NX&&p.y<NTOP+R*0.3&&p.y>TOP-0.1&&Math.abs(p.z-NZ)<R+NH){p.z=NZ+(pz>NZ?1:-1)*(R+NH);v.z*=-0.25;v.x*=0.6;sfx.net();}
   if(state==='play'&&cd<=0&&!ffwd){tryHit(P);tryHit(AI);}
   if(mode==='ai'&&aiCatch&&state==='play'&&cd<=0&&lastHit==='P'&&bouncedOpp&&v.z<0&&p.z<AI.g.position.z+0.1)aiReturn(); // guaranteed return
   if(p.y<TOP-1||Math.abs(p.z)>6||Math.abs(p.x)>5)out();
@@ -757,8 +825,8 @@ function onEv(e){
     case 'sw': smashR(AI); break;
     case 'hit': applyRemoteHit(m); break;
     case 'serve': if(mode==='guest'){server=m.server==='G'?'P':'A';score.P=m.sc.G;score.A=m.sc.H;hud();startServe();} break;
-    case 'point': if(mode==='guest'){score.P=m.sc.G;score.A=m.sc.H;hud();setCombo(0);state='point';timer=1.4;msg(m.w==='G'?'Point for you!':'Point for your opponent');} break;
-    case 'over': if(mode==='guest'){state='over';msg(m.w==='G'?'You win! Tap to play again':'Your opponent wins. Tap to play again');} break;
+    case 'point': if(mode==='guest'){score.P=m.sc.G;score.A=m.sc.H;hud();sfx.point(m.w==='G');setCombo(0);state='point';timer=1.4;msg(m.w==='G'?'Point for you!':'Point for your opponent');} break;
+    case 'over': if(mode==='guest'){state='over';sfx.over(m.w==='G');msg(m.w==='G'?'You win! Tap to play again':'Your opponent wins. Tap to play again');} break;
     case 'rematch': if(mode==='host'&&state==='over'){score.P=score.A=0;server='P';hud();startServe();} break;
     case 'bye': onNetClose(); break;
   }
@@ -1038,7 +1106,7 @@ renderer.setAnimationLoop(()=>{
     if(swingOwner==='P')p.x=P.g.position.x;
     if((timer-=dt)<=0)launchServe();
   }else if(state==='point'&&mode!=='guest'&&(timer-=dt)<=0){
-    if(score.P>=WIN||score.A>=WIN){state='over';msg(score.P>score.A?'You win! Tap to play again':`${mode==='ai'?'AI':'Your opponent'} wins. Tap to play again`);if(mode==='host')netSend({t:'over',w:score.P>score.A?'H':'G'});}
+    if(score.P>=WIN||score.A>=WIN){state='over';sfx.over(score.P>score.A);msg(score.P>score.A?'You win! Tap to play again':`${mode==='ai'?'AI':'Your opponent'} wins. Tap to play again`);if(mode==='host')netSend({t:'over',w:score.P>score.A?'H':'G'});}
     else{server=(((score.P+score.A)>>1)%2===0)?'P':'A';startServe();}
   }
   if(pendingWin&&state==='play'&&performance.now()>pendingWin.until)award(pendingWin.w);
