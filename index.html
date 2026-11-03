@@ -1,41 +1,200 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>Ping Pong</title>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@800&display=swap" rel="stylesheet">
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#7b7f85;font-family:system-ui,sans-serif;touch-action:none;user-select:none}
 canvas{display:block}
-#hud{position:fixed;top:12px;left:0;right:0;text-align:center;color:#fff;font-size:28px;font-weight:700;pointer-events:none;text-shadow:0 2px 6px #000a}
-#msg{position:fixed;bottom:12%;left:0;right:0;text-align:center;color:#fff;font-size:22px;pointer-events:none;text-shadow:0 2px 6px #000a}
-#views{position:fixed;top:12px;right:12px;display:flex;flex-direction:column;gap:6px;align-items:stretch;z-index:5}
-#views small{color:#fff;font-size:11px;letter-spacing:.08em;text-transform:uppercase;text-align:right;opacity:.85;text-shadow:0 1px 3px #000a}
-#views button{font:600 13px system-ui,sans-serif;color:#fff;background:rgba(20,24,30,.55);border:1px solid rgba(255,255,255,.28);border-radius:8px;padding:7px 12px;cursor:pointer;text-align:left;backdrop-filter:blur(4px);touch-action:manipulation}
-#views button:hover{background:rgba(20,24,30,.75)}
-#views button.on{background:#fff;color:#20242a;border-color:#fff}
-#views button kbd{font:inherit;opacity:.55;margin-right:8px}
-#menubtn{position:fixed;left:12px;bottom:12px;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(20,24,30,.6);color:#fff;font-size:22px;cursor:pointer;z-index:6;backdrop-filter:blur(4px);touch-action:manipulation}
-#menu{position:fixed;left:12px;bottom:64px;width:min(320px,calc(100vw - 24px));max-height:calc(100vh - 90px);overflow:auto;box-sizing:border-box;padding:14px;border-radius:14px;background:rgba(18,22,30,.88);border:1px solid rgba(255,255,255,.18);color:#fff;z-index:6;display:none;backdrop-filter:blur(8px);font-size:13px}
-#menu.open{display:block}
-#menu h3{margin:0 0 10px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.8}
-#menu label{display:block;margin:10px 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
-#menu select{width:100%;font:600 14px system-ui,sans-serif;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:9px 10px}
-#menu select option{color:#111}
-#menu .add{display:block;width:100%;margin-top:14px;padding:10px;border-radius:8px;border:1.5px dashed rgba(255,255,255,.5);background:transparent;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer}
-#menu .add:hover{background:rgba(255,255,255,.08)}
-#menu p{margin:10px 0 0;font-size:12px;line-height:1.45;opacity:.75}
-#menu p b{color:#ffb454}
-#combo{position:fixed;left:18px;top:64px;color:#fff;pointer-events:none;display:none;text-shadow:0 2px 8px #000a;z-index:4}
-#combo small{display:block;font-size:12px;letter-spacing:.2em;opacity:.85}
-#combo b{display:block;font-size:54px;line-height:1;font-weight:900;transform-origin:left center}
-#combo i{display:block;font-style:normal;font-size:13px;font-weight:600;opacity:.95}
-#combo.pop b{animation:pop .22s ease-out}
-@keyframes pop{0%{transform:scale(1.45)}100%{transform:scale(1)}}
-#blast{position:fixed;left:0;right:0;top:26%;text-align:center;font-size:clamp(34px,7vw,72px);font-weight:900;color:#ffb454;-webkit-text-stroke:2px #7a2300;text-shadow:0 4px 18px #000a;pointer-events:none;display:none;z-index:4}
+/* hide legacy HUD elements – replaced by SVG overlays */
+#hud,#views,#menubtn,#menu,#combo{display:none!important}
+#msg{position:fixed;bottom:14%;left:0;right:0;text-align:center;color:#fff;font-size:clamp(16px,2.4vw,22px);pointer-events:none;text-shadow:0 2px 6px #000a;z-index:12;font-family:'Luckiest Guy',system-ui,sans-serif}
+#blast{position:fixed;left:0;right:0;top:26%;text-align:center;font-size:clamp(34px,7vw,72px);font-weight:900;color:#ffb454;-webkit-text-stroke:2px #7a2300;text-shadow:0 4px 18px #000a;pointer-events:none;display:none;z-index:12;font-family:'Luckiest Guy',system-ui,sans-serif}
 #blast.go{display:block;animation:blast .9s ease-out forwards}
 @keyframes blast{0%{transform:scale(.4);opacity:0}18%{transform:scale(1.25);opacity:1}35%{transform:scale(1)}100%{transform:scale(1.1);opacity:0}}
-#toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);max-width:min(520px,calc(100vw - 24px));padding:9px 14px;border-radius:10px;background:rgba(18,22,30,.9);color:#fff;font-size:14px;z-index:7;display:none;pointer-events:none;text-align:center}
-#drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(20,30,50,.55);color:#fff;font-size:26px;font-weight:700;z-index:8;pointer-events:none;border:4px dashed rgba(255,255,255,.7);box-sizing:border-box}
+#toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);max-width:min(520px,calc(100vw - 24px));padding:9px 14px;border-radius:10px;background:rgba(18,22,30,.9);color:#fff;font-size:14px;z-index:30;display:none;pointer-events:none;text-align:center}
+#drop{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(20,30,50,.55);color:#fff;font-size:26px;font-weight:700;z-index:40;pointer-events:none;border:4px dashed rgba(255,255,255,.7);box-sizing:border-box}
+
+/* ===== Default in-game HUD (Deafult view.svg) ===== */
+#uiDefault{position:fixed;inset:0;z-index:10;pointer-events:none;display:none}
+#uiDefault.on{display:block}
+#uiDefault .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+#uiDefault .stage > img{width:100%;height:100%;object-fit:cover;object-position:center top;pointer-events:none}
+#uiDefault .hot{position:absolute;pointer-events:auto;cursor:pointer;background:transparent;border:0;padding:0}
+#uiDefault .hot:focus{outline:2px solid #ffb121;outline-offset:2px}
+/* Menu icon ~ left side of design (x≈58-137, y≈22-93 of 1920x1080) */
+#uiDefault .btnMenu{left:2.8%;top:1.8%;width:4.2%;height:7%;}
+/* Fullscreen icon ~ (x≈186-260, y≈22-90) */
+#uiDefault .btnFs{left:9.6%;top:1.8%;width:4%;height:7%;}
+/* dynamic score text overlays */
+#uiDefault .scoreYou{position:absolute;left:39.5%;top:4.8%;width:6%;height:7%;display:flex;align-items:center;justify-content:center;text-align:center;font-family:'Luckiest Guy',cursive;font-size:clamp(28px,3.4vw,64px);color:#fff;text-shadow:2px 2px 0 #0004;line-height:1;background:#FA485B;z-index:2}
+#uiDefault .scoreBot{position:absolute;left:54.5%;top:4.5%;width:6%;height:7%;display:flex;align-items:center;justify-content:center;text-align:center;font-family:'Luckiest Guy',cursive;font-size:clamp(28px,3.4vw,64px);color:#fff;text-shadow:2px 2px 0 #0004;line-height:1;background:#236ADC;z-index:2}
+#uiDefault .comboBox{position:absolute;right:8%;top:42%;display:none;text-align:center;pointer-events:none;transform:rotate(8deg)}
+#uiDefault .comboBox.show{display:block}
+#uiDefault .comboBox .n{font-family:'Luckiest Guy',cursive;font-size:clamp(48px,6.5vw,128px);color:#fff;-webkit-text-stroke:clamp(6px,.8vw,15px) #236ADC;line-height:1}
+#uiDefault .comboBox .x{font-family:'Luckiest Guy',cursive;font-size:clamp(32px,5vw,96px);color:#fff;-webkit-text-stroke:clamp(5px,.7vw,12px) #236ADC;margin-left:.1em}
+#uiDefault .comboBox .lbl{font-family:'Luckiest Guy',cursive;font-size:clamp(18px,2.5vw,48px);color:#fff;-webkit-text-stroke:clamp(4px,.5vw,10px) #236ADC;display:block;margin-top:-.15em}
+#uiDefault .serveHint{position:absolute;left:50%;bottom:8%;transform:translateX(-50%);font-family:'Luckiest Guy',cursive;font-size:clamp(14px,1.6vw,22px);color:#fff;text-shadow:0 2px 6px #000a;white-space:nowrap;opacity:.95}
+
+/* ===== Expanded inventory overlay ===== */
+#uiInv{position:fixed;inset:0;z-index:25;display:none;pointer-events:none;background:rgba(0,0,0,.25)}
+#uiInv.open{display:block;pointer-events:auto}
+#uiInv .stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+#uiInv .stage > img{width:100%;height:100%;object-fit:cover;object-position:center top;pointer-events:none}
+#uiInv .panel{position:absolute;left:2%;top:6%;width:24%;max-width:440px;bottom:4%;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+#uiInv .panel h2{margin:0;font-family:'Luckiest Guy',cursive;font-size:clamp(22px,2.2vw,36px);color:#fff;text-shadow:0 2px 4px #0006}
+#uiInv .row{display:flex;flex-direction:column;gap:4px}
+#uiInv label{font-family:'Luckiest Guy',cursive;font-size:clamp(14px,1.4vw,22px);color:#1B54AF;text-shadow:0 1px 0 #fff}
+#uiInv select{font:600 15px system-ui,sans-serif;padding:10px 12px;border-radius:10px;border:3px solid #1B54AF;background:#FEFEFF;color:#1B54AF;width:100%}
+#uiInv .diff{display:flex;gap:8px;flex-wrap:wrap}
+#uiInv .diff button{font-family:'Luckiest Guy',cursive;font-size:clamp(12px,1.2vw,18px);padding:8px 14px;border-radius:8px;border:3px solid #236ADC;background:#fff;color:#236ADC;cursor:pointer}
+#uiInv .diff button.on{background:#236ADC;color:#fff;border-color:#236ADC}
+#uiInv .camRow{display:flex;gap:8px;flex-wrap:wrap}
+#uiInv .camRow button{font:600 13px system-ui;padding:8px 12px;border-radius:8px;border:2px solid #236ADC;background:#fff;color:#236ADC;cursor:pointer}
+#uiInv .camRow button.on{background:#236ADC;color:#fff}
+#uiInv .addGlb{margin-top:auto;padding:14px;border:3px dashed #1B54AF;border-radius:12px;background:transparent;color:#1B54AF;font-family:'Luckiest Guy',cursive;font-size:clamp(16px,1.8vw,28px);cursor:pointer;text-align:center}
+#uiInv .addGlb:hover{background:rgba(27,84,175,.08)}
+#uiInv .mainMenuBtn{padding:14px 18px;border:0;border-radius:0 0 12px 0;background:#FA485B;color:#fff;font-family:'Luckiest Guy',cursive;font-size:clamp(16px,1.8vw,28px);cursor:pointer;text-align:center;box-shadow:0 4px 0 #b03440}
+#uiInv .mainMenuBtn:hover{filter:brightness(1.05)}
+#uiInv .closeX{position:absolute;right:2%;top:2%;width:48px;height:48px;border-radius:50%;border:3px solid #1B54AF;background:#fff;color:#1B54AF;font-size:24px;cursor:pointer;pointer-events:auto;z-index:2}
+
+/* ===== Main menu overlay ===== */
+#uiMain{position:fixed;inset:0;z-index:22;display:none;pointer-events:none}
+#uiMain.on{display:block;pointer-events:auto}
+#uiMain .stage{position:absolute;inset:0}
+#uiMain .stage > img{width:100%;height:100%;object-fit:cover;object-position:center;pointer-events:none}
+#uiMain .btns{position:absolute;left:50%;top:48%;transform:translateX(-50%);display:flex;flex-direction:column;gap:18px;width:min(520px,70vw);align-items:center}
+#uiMain .btns button{font-family:'Luckiest Guy',cursive;font-size:clamp(22px,2.8vw,45px);padding:16px 28px;width:100%;border:0;border-radius:16px;cursor:pointer;box-shadow:0 6px 0 #0003;transition:transform .08s,box-shadow .08s}
+#uiMain .btns button:active{transform:translateY(3px);box-shadow:0 2px 0 #0003}
+#uiMain .btns .play{background:#FFB121;color:#1a1a1a}
+#uiMain .btns .lan,#uiMain .btns .online{background:#fff;color:#1B54AF;font-family:Rubik,system-ui,sans-serif;font-weight:800;font-size:clamp(18px,2.4vw,36px)}
+#uiMain .subCards{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(20,30,50,.55);z-index:2}
+#uiMain .subCards.on{display:flex}
+#uiMain .subCards .card{background:rgba(18,22,30,.92);color:#fff;padding:24px;border-radius:18px;width:min(420px,92vw);text-align:center;backdrop-filter:blur(8px)}
+#uiMain .subCards h2{margin:0 0 12px;font-family:'Luckiest Guy',cursive}
+#uiMain .subCards button{font:700 16px system-ui;border-radius:12px;padding:12px 16px;width:100%;margin:6px 0;border:0;cursor:pointer}
+#uiMain .subCards .big{background:#fff;color:#20242a}
+#uiMain .subCards .ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4)}
+#uiMain .subCards canvas{background:#fff;border-radius:10px;width:min(280px,70vw);margin:8px auto;display:block}
+#uiMain .subCards video{width:min(320px,80vw);border-radius:12px;background:#000;max-height:40vh;object-fit:cover}
+#uiMain .subCards textarea,#uiMain .subCards input{width:100%;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.35);color:#fff;padding:8px;margin-top:6px}
+#uiMain .subCards .code{font:800 40px ui-monospace,monospace;letter-spacing:.06em;margin:10px 0;background:rgba(0,0,0,.3);border-radius:12px;padding:12px}
+#uiMain .subCards .row{display:flex;gap:8px}
 </style></head><body>
-<div id="hud">You 0 : 0 AI</div><div id="toast"></div><div id="combo"><small>COMBO</small><b>0</b><i></i></div><div id="blast"></div><div id="drop">Drop your .glb here</div><div id="msg">Loading…</div>
+<!-- Legacy placeholders kept for JS compatibility (hidden via CSS) -->
+<div id="hud" style="display:none">You 0 : 0 AI</div>
+<div id="toast"></div>
+<div id="combo" style="display:none"><small>COMBO</small><b>0</b><i></i></div>
+<div id="blast"></div>
+<div id="drop">Drop your .glb here</div>
+<div id="msg">Loading…</div>
+
+<!-- Default in-game HUD -->
+<div id="uiDefault">
+  <div class="stage">
+    <img src="Deafult%20view.svg" alt="" draggable="false">
+    <button type="button" class="hot btnMenu" title="Menu (M)" id="btnMenuHud" aria-label="Open inventory"></button>
+    <button type="button" class="hot btnFs" title="Fullscreen" id="btnFs" aria-label="Toggle fullscreen"></button>
+    <div class="scoreYou" id="scYou">0</div>
+    <div class="scoreBot" id="scBot">0</div>
+    <div class="comboBox" id="comboBox"><span class="n" id="comboN">0</span><span class="x">x</span><span class="lbl" id="comboLbl"></span></div>
+    <div class="serveHint" id="serveHint"></div>
+  </div>
+</div>
+
+<!-- Inventory / Expanded menu -->
+<div id="uiInv">
+  <button type="button" class="closeX" id="invClose" title="Close">×</button>
+  <div class="stage">
+    <img src="Expanded.svg" alt="" draggable="false">
+  </div>
+  <div class="panel">
+    <h2>INVENTORY</h2>
+    <div class="row"><label>Your Racket</label><select id="selP"></select></div>
+    <div class="row"><label id="lblA">Bot Racket</label><select id="selA"></select></div>
+    <div class="row"><label>Table</label><select id="selT"></select></div>
+    <div class="row"><label>Ball</label><select id="selB"></select></div>
+    <div class="row"><label>AI Level</label>
+      <div class="diff" id="aiDiff">
+        <button type="button" data-ai="medium">Medium</button>
+        <button type="button" data-ai="expert">Expert</button>
+        <button type="button" data-ai="perfect">Perfect</button>
+      </div>
+    </div>
+    <div class="row"><label>Camera</label>
+      <div class="camRow" id="camRow">
+        <button type="button" data-view="classic">Classic</button>
+        <button type="button" data-view="high">Zoom out</button>
+        <button type="button" id="folBtnNew">Following: ON</button>
+      </div>
+    </div>
+    <button type="button" class="addGlb" id="addBtn">＋  Add .Glb</button>
+    <button type="button" class="mainMenuBtn" id="mainBtn">☰  Main Menu</button>
+    <input type="file" id="fileIn" accept=".glb" multiple hidden>
+  </div>
+</div>
+
+<!-- Main menu (start screen visual) -->
+<div id="uiMain">
+  <div class="stage">
+    <img src="Main%20menu.svg" alt="" draggable="false">
+  </div>
+  <div class="btns" id="mainBtns">
+    <button type="button" class="play" id="bAI">Play vs AI</button>
+    <button type="button" class="lan" id="bLAN">Multiplayer · Lan</button>
+    <button type="button" class="online" id="bOn">Multiplayer · Online</button>
+  </div>
+  <!-- sub-screens for LAN / Online flow (keep functional parity) -->
+  <div class="subCards" id="subCards">
+    <div class="card" data-s="lan" style="display:none">
+      <h2>LAN match</h2>
+      <p>Both devices must be on the same Wi-Fi.</p>
+      <button class="big" id="bHost">Host a match</button>
+      <button class="big" id="bJoin">Join a match</button>
+      <button class="ghost" id="bLanBack">Back</button>
+    </div>
+    <div class="card" data-s="wait" style="display:none">
+      <h2 id="waitT">Please wait…</h2>
+      <p id="waitP"></p>
+    </div>
+    <div class="card" data-s="show" style="display:none">
+      <h2 id="showT"></h2>
+      <canvas id="qr"></canvas>
+      <p id="showP"></p>
+      <textarea id="showTxt" readonly></textarea>
+      <button class="big" id="bCopy">Copy code</button>
+      <button class="big" id="bNext" style="display:none">Next</button>
+      <button class="ghost" id="bShowBack">Back</button>
+    </div>
+    <div class="card" data-s="scan" style="display:none">
+      <h2 id="scanT"></h2>
+      <video id="scanVid" playsinline muted></video>
+      <p id="scanP"></p>
+      <textarea id="scanTxt" placeholder="Or paste the code here"></textarea>
+      <button class="big" id="bGo">Use this code</button>
+      <button class="ghost" id="bScanBack">Back</button>
+    </div>
+    <div class="card" data-s="online" style="display:none">
+      <h2>Online match</h2>
+      <p>Needs internet on both devices. Create a room, or pick one from the list.</p>
+      <button class="big" id="bCreate">Create a room</button>
+      <button class="big" id="bJoinRoom">Join a room</button>
+      <button class="ghost" id="bOnBack">Back</button>
+    </div>
+    <div class="card" data-s="hostroom" style="display:none">
+      <h2>Your room</h2>
+      <div class="code" id="roomCode"></div>
+      <p>Waiting for a player to join…<br>Tell your friend this code, or they can pick it from the list.</p>
+      <button class="ghost" id="bHostCancel">Cancel</button>
+    </div>
+    <div class="card" data-s="rooms" style="display:none">
+      <h2>Open rooms</h2>
+      <div id="roomList"></div>
+      <div class="row" style="margin-top:10px"><input id="codeIn" placeholder="room code"><button class="big" id="bCodeGo" style="flex:0 0 auto;width:auto;padding:10px 14px">Join</button></div>
+      <button class="ghost" id="bRoomsBack">Back</button>
+    </div>
+  </div>
+</div>
+
 <script>/* qrcode-generator (MIT, Kazuhiko Arase) */
 // Licensed under the MIT license:
 //  http://www.opensource.org/licenses/mit-license.php
@@ -68,14 +227,24 @@ const SERVE_DELAY=0.3; // seconds into the smash swing when the serve ball launc
 const SPIN_K=0.5, CAM_SMOOTH=5; // ball spin strength (1 = true rolling speed), camera transition speed
 const BG=0x7b7f85, FLOOR=0x62666c; // gray surroundings
 // ---- look: colour + rim light (edit these) ----
-const COLOR_SAT=1.3, EXPOSURE=1;                 // picture saturation (1 = as before) and brightness
-const TABLE_BRIGHT=1;                             // lifts the built-in table's dark blue (1 = as before)
-const RIM_START=0.6, RIM_SOFT=0.1;                 // rim width (0.5 = wide ... 0.8 = thin line) and edge softness (smaller = sharper)
+const COLOR_SAT=1.4, EXPOSURE=1.12;                 // picture saturation (1 = as before) and brightness
+const TABLE_BRIGHT=2.2;                             // lifts the built-in table's dark blue (1 = as before)
+const RIM_START=0.6, RIM_SOFT=0.07;                 // rim width (0.5 = wide ... 0.8 = thin line) and edge softness (smaller = sharper)
 const RIM={table:[0xffffff,1.6], racket:[0xffffff,1.7], ball:[0xffffff,1.4]}; // [rim colour, strength] per object
-const BLUR=0.003;                                    // background blur: max blur size as a fraction of the screen height (0 = off)
+const BLUR=0.02;                                    // background blur: max blur size as a fraction of the screen height (0 = off)
 const clamp=THREE.MathUtils.clamp, rnd=(a,b)=>a+Math.random()*(b-a);
 let mode='ai', paused=true, oppLabel='AI'; // mode: 'ai' | 'host' | 'guest' (LAN match); paused = start screen is open
-const msg=t=>$('msg').textContent=t, hud=()=>$('hud').textContent=`You ${score.P} : ${score.A} ${oppLabel}`;
+const msg=t=>{
+  $('msg').textContent=t;
+  const sh=$('serveHint');
+  if(sh){ const show=/serve/i.test(t||''); sh.textContent=show?(t||''):''; sh.style.display=show?'block':'none'; }
+};
+const hud=()=>{
+  $('hud').textContent=`You ${score.P} : ${score.A} ${oppLabel}`;
+  const sy=$('scYou'), sb=$('scBot');
+  if(sy)sy.textContent=score.P;
+  if(sb)sb.textContent=score.A;
+};
 
 { const k='color = ACESOutputMat * color;\n\treturn saturate( color );', C=THREE.ShaderChunk;
   if(C.tonemapping_pars_fragment.includes(k))C.tonemapping_pars_fragment=C.tonemapping_pars_fragment.replace(k,'color = ACESOutputMat * color;\n\tfloat lum = dot( color, vec3( 0.2126, 0.7152, 0.0722 ) );\n\tcolor = mix( vec3( lum ), color, '+COLOR_SAT.toFixed(3)+' );\n\treturn saturate( color );');
@@ -321,12 +490,16 @@ const score={P:0,A:0}; let state='serve', server='P', lastHit=null, bouncedOpp=f
 let pendingWin=null, ffwd=false; // pendingWin: host waits a moment before giving a point (the other player may still be returning the ball)
 let combo=0, smashPow=0, shake=0, gB=G; // gB = gravity on the ball right now (a blast makes it heavier until it lands)
 function setCombo(n){
-  const prev=combo; combo=n; const el=$('combo');
-  if(n<=0){el.style.display='none';return;}
+  const prev=combo; combo=n;
+  const el=$('combo'); // legacy (hidden)
+  if(n<=0){el.style.display='none'; const cb=$('comboBox'); if(cb)cb.classList.remove('show'); return;}
   const up=Math.round(COMBO_SPEED*Math.min(n,COMBO_MAX)*100);
   el.style.display='block'; el.querySelector('b').textContent=n; el.querySelector('i').textContent=`smash +${up}% speed`+(n>=COMBO_MAX?' (MAX)':'');
   el.querySelector('b').style.color=`hsl(${Math.max(0,55-n*5)} 100% 62%)`;
   if(n>prev){el.classList.remove('pop');void el.offsetWidth;el.classList.add('pop');}
+  const cb=$('comboBox'); if(cb){ cb.classList.add('show'); $('comboN').textContent=n;
+    const labels=['','','DOUBLE','TRIPLE','QUAD','PENTA','HEXA','MEGA','ULTRA','INSANE','GODLIKE'];
+    $('comboLbl').textContent=labels[Math.min(n,labels.length-1)]||(n+'x'); }
 }
 function blastText(t){const b=$('blast');b.textContent=t;b.classList.remove('go');void b.offsetWidth;b.classList.add('go');}
 const spin=new THREE.Vector3(), spinT=new THREE.Vector3(), spinQ=new THREE.Quaternion();
@@ -349,64 +522,71 @@ function updateCam(dt,snap){
   cam.position.add(shakeOff);
   cam.updateProjectionMatrix(); cam.lookAt(camLook);
 }
-const viewBox=document.createElement('div'); viewBox.id='views'; viewBox.innerHTML='<small>Camera</small>';
-const viewBtn={};
-Object.keys(VIEWS).forEach((k,i)=>{
-  const b=document.createElement('button'); b.type='button'; b.innerHTML=`<kbd>${i+1}</kbd>${VIEWS[k].label}`; b.title=`${VIEWS[k].label} (key ${i+1})`;
-  b.addEventListener('click',()=>{setView(k);b.blur();}); viewBox.appendChild(b); viewBtn[k]=b;
-});
-const folBtn=document.createElement('button'); folBtn.type='button'; folBtn.title='Follow racket on/off (key F)';
-folBtn.addEventListener('click',()=>{setFollow(!follow);folBtn.blur();}); viewBox.appendChild(folBtn);
-const aiHead=document.createElement('small'); aiHead.textContent='AI level'; aiHead.style.marginTop='8px'; viewBox.appendChild(aiHead);
-const aiBtn={};
-for(const k in AI_LEVELS){const b=document.createElement('button'); b.type='button'; b.innerHTML=`<kbd>${AI_LEVELS[k].sub}</kbd>${AI_LEVELS[k].label}`; b.title=`AI catches ${AI_LEVELS[k].sub} of legal balls`;
-  b.addEventListener('click',()=>{setAI(k);b.blur();}); viewBox.appendChild(b); aiBtn[k]=b;}
-function setAI(k){aiLevel=k; for(const n in aiBtn)aiBtn[n].classList.toggle('on',n===k); try{localStorage.setItem('pp_ai',k);}catch(e){}}
-setAI(aiLevel);
-document.body.appendChild(viewBox);
-viewBox.addEventListener('pointerdown',e=>e.stopPropagation()); // clicking a button must not serve / smash
-function setView(k){view=k; for(const n in viewBtn)viewBtn[n].classList.toggle('on',n===k);}
-function setFollow(f){follow=f; folBtn.classList.toggle('on',f); folBtn.innerHTML=`<kbd>F</kbd>Follow racket: ${f?'ON':'OFF'}`;}
-setView('classic'); setFollow(true); updateCam(0,true);
 
-// ---- menu: pick / add your own racket and table scene (.glb) ----
+// ---- New UI: camera + AI + inventory (SVG overlays) ----
+const viewBtn={}, aiBtn={};
 const toastEl=$('toast'); let toastT=0;
 function toast(t,ms=4200){toastEl.textContent=t;toastEl.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>toastEl.style.display='none',ms);}
-const menuBtn=document.createElement('button'); menuBtn.id='menubtn'; menuBtn.type='button'; menuBtn.title='Menu (key M)'; menuBtn.textContent='☰';
-const menu=document.createElement('div'); menu.id='menu';
-menu.innerHTML=`<h3>Assets</h3>
-<label>Your racket</label><select id="selP"></select>
-<label id="lblA">AI racket</label><select id="selA"></select>
-<label>Table &amp; scene</label><select id="selT"></select>
-<label>Ball</label><select id="selB"></select>
-<button type="button" class="add" id="addBtn">＋ Add .glb</button>
-<button type="button" class="add" id="mainBtn" style="margin-top:8px">☰ Main menu</button>
-<p>Models come from the <b>assets/racket</b>, <b>assets/ball</b> and <b>assets/table</b> folders. You can also tap <b>Add .glb</b> or drag a file onto the page. The game tells what it is from the names inside:</p>
-<p><b>Ball</b>: the file name or an object inside ends with <b>_ball</b> (fire_ball, dog_ball...).</p>
-<p><b>Racket</b>: an object named <b>collision</b> (the hit area). Animations: Left, Right, Idle, Smash.</p>
-<p><b>Table scene</b>: objects named <b>board</b> and <b>net</b>. Everything else is flat background, not affected by light or ball.</p>
-<p>Added files stay until you reload the page.</p>
-<input type="file" id="fileIn" accept=".glb" multiple hidden>`;
-document.body.append(menuBtn,menu);
-for(const el of [menuBtn,menu])el.addEventListener('pointerdown',e=>e.stopPropagation());
+
+function setView(k){view=k; document.querySelectorAll('#camRow [data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===k));}
+function setFollow(f){follow=f; const b=$('folBtnNew'); if(b){b.classList.toggle('on',f); b.textContent=`Following: ${f?'ON':'OFF'}`;} }
+function setAI(k){aiLevel=k; document.querySelectorAll('#aiDiff [data-ai]').forEach(b=>b.classList.toggle('on',b.dataset.ai===k)); try{localStorage.setItem('pp_ai',k);}catch(e){}}
+setView('classic'); setFollow(true); setAI(aiLevel); updateCam(0,true);
+
+const setMenu=o=>{
+  const inv=$('uiInv');
+  if(!inv)return;
+  inv.classList.toggle('open',!!o);
+};
+const menuBtn={blur(){}, addEventListener(){}}; // stub so old listeners don't break if any remain
+
+// wire inventory selects (elements already in DOM)
 const selEl={P:$('selP'),A:$('selA'),T:$('selT'),B:$('selB')};
 function refreshMenu(){
-  const fill=(el,list,cur)=>{el.innerHTML=''; list.forEach((e,i)=>{const o=document.createElement('option'); o.value=i; o.textContent=e.name; el.appendChild(o);}); el.value=list.indexOf(cur);};
+  const fill=(el,list,cur)=>{if(!el)return; el.innerHTML=''; list.forEach((e,i)=>{const o=document.createElement('option'); o.value=i; o.textContent=e.name; el.appendChild(o);}); el.value=list.indexOf(cur);};
   fill(selEl.P,LIB.racket,sel.P); fill(selEl.A,LIB.racket,sel.A); fill(selEl.T,LIB.table,sel.T); fill(selEl.B,LIB.ball,sel.B);
 }
-selEl.P.addEventListener('change',()=>{setRacket('P',LIB.racket[selEl.P.value]);saveSel();selEl.P.blur();});
-selEl.A.addEventListener('change',()=>{setRacket('A',LIB.racket[selEl.A.value]);saveSel();selEl.A.blur();});
-selEl.T.addEventListener('change',()=>{setTable(LIB.table[selEl.T.value]);saveSel();selEl.T.blur();});
-selEl.B.addEventListener('change',()=>{setBall(LIB.ball[selEl.B.value]);saveSel();selEl.B.blur();});
-const setMenu=o=>menu.classList.toggle('open',o);
-menuBtn.addEventListener('click',()=>{setMenu(!menu.classList.contains('open'));menuBtn.blur();});
-$('addBtn').addEventListener('click',()=>$('fileIn').click());
-$('fileIn').addEventListener('change',e=>{addFiles([...e.target.files]);e.target.value='';});
+if(selEl.P){
+  selEl.P.addEventListener('change',()=>{setRacket('P',LIB.racket[selEl.P.value]);saveSel();selEl.P.blur();});
+  selEl.A.addEventListener('change',()=>{setRacket('A',LIB.racket[selEl.A.value]);saveSel();selEl.A.blur();});
+  selEl.T.addEventListener('change',()=>{setTable(LIB.table[selEl.T.value]);saveSel();selEl.T.blur();});
+  selEl.B.addEventListener('change',()=>{setBall(LIB.ball[selEl.B.value]);saveSel();selEl.B.blur();});
+}
+$('addBtn')&&$('addBtn').addEventListener('click',()=>$('fileIn').click());
+$('fileIn')&&$('fileIn').addEventListener('change',e=>{addFiles([...e.target.files]);e.target.value='';});
+$('invClose')&&$('invClose').addEventListener('click',()=>setMenu(false));
+$('btnMenuHud')&&$('btnMenuHud').addEventListener('click',e=>{e.stopPropagation();setMenu(!$('uiInv').classList.contains('open'));});
+$('mainBtn')&&$('mainBtn').addEventListener('click',()=>{setMenu(false);leaveMatch(null,'home');});
+
+// AI difficulty buttons
+document.querySelectorAll('#aiDiff [data-ai]').forEach(b=>{
+  b.addEventListener('click',()=>{setAI(b.dataset.ai);});
+});
+// Camera buttons
+document.querySelectorAll('#camRow [data-view]').forEach(b=>{
+  b.addEventListener('click',()=>setView(b.dataset.view));
+});
+$('folBtnNew')&&$('folBtnNew').addEventListener('click',()=>setFollow(!follow));
+
+// Fullscreen
+function toggleFs(){
+  const d=document;
+  if(!d.fullscreenElement && !d.webkitFullscreenElement){
+    const el=d.documentElement;
+    (el.requestFullscreen||el.webkitRequestFullscreen||el.msRequestFullscreen||(()=>{})).call(el);
+  }else{
+    (d.exitFullscreen||d.webkitExitFullscreen||d.msExitFullscreen||(()=>{})).call(d);
+  }
+}
+$('btnFs')&&$('btnFs').addEventListener('click',e=>{e.stopPropagation();toggleFs();});
+
+// drag-drop for .glb
 let dragN=0;
 addEventListener('dragenter',e=>{e.preventDefault();dragN++;$('drop').style.display='flex';});
 addEventListener('dragleave',e=>{e.preventDefault();if(--dragN<=0){dragN=0;$('drop').style.display='none';}});
 addEventListener('dragover',e=>e.preventDefault());
 addEventListener('drop',e=>{e.preventDefault();dragN=0;$('drop').style.display='none';addFiles([...(e.dataTransfer?.files||[])]);});
+
 function uniq(list,name){let n=name,i=2; while(list.some(e=>e.name===n))n=`${name} (${i++})`; return n;}
 function detect(src,label){
   let col=false,board=false,net=false;
@@ -440,11 +620,16 @@ async function addFiles(files){
   }
 }
 refreshMenu();
+
+['uiMain','uiInv'].forEach(id=>{
+  const el=$(id); if(el)el.addEventListener('pointerdown',e=>e.stopPropagation());
+});
+
 if(LOAD_BAD.length)toast('Could not load: '+LOAD_BAD.join(', '),8000);
 
 // ---- input ----
 const ptr=new THREE.Vector2(0,-0.5), ray=new THREE.Raycaster(), plane=new THREE.Plane(new THREE.Vector3(0,1,0),-0.3);
-const setPtr=e=>e.target.closest&&e.target.closest('#views,#menu,#menubtn')?0:ptr.set(e.clientX/innerWidth*2-1,-((e.clientY-(e.pointerType==='touch'?70:0))/innerHeight)*2+1);
+const setPtr=e=>e.target.closest&&e.target.closest('#uiInv,#uiMain,#uiDefault .hot,button,select,textarea,input')?0:ptr.set(e.clientX/innerWidth*2-1,-((e.clientY-(e.pointerType==='touch'?70:0))/innerHeight)*2+1);
 function tap(){
   if(paused)return;
   if(state==='over'){ if(mode==='guest')netSend({t:'rematch'}); else {score.P=score.A=0;server='P';hud();startServe();} }
@@ -457,7 +642,7 @@ const smash=()=>{if(paused)return; if(smashR(P))netSend({t:'sw'});};
 addEventListener('pointerdown',e=>{setPtr(e);if(e.button===0&&state==='play')smash();else tap();});
 addEventListener('keydown',e=>{
   if(/^(SELECT|INPUT|TEXTAREA)$/.test(e.target.tagName))return;
-  if(e.code==='KeyM'){setMenu(!menu.classList.contains('open'));return;}
+  if(e.code==='KeyM'){setMenu(!$('uiInv').classList.contains('open'));return;}
   if(e.code==='Escape'){setMenu(false);return;}
   if(e.code==='Space'){e.preventDefault();tap();}
   const ks=Object.keys(VIEWS), m=/^(?:Digit|Numpad)([1-9])$/.exec(e.code);
@@ -791,53 +976,42 @@ function drawQR(cv,text){
   for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(q.isDark(r,c))x.fillRect((c+4)*px,(r+4)*px,px,px);
 }
 
-// ---- start screen + LAN screens ----
-const stCss=document.createElement('style');
-stCss.textContent=`#start{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 30%,#5d6470 0%,#2b2f37 80%);padding:16px;box-sizing:border-box;overflow:auto}
-#start .card{display:none;width:min(420px,100%);color:#fff;text-align:center;margin:auto}
-#start .card.on{display:block}
-#start h1{font-size:46px;margin:0 0 24px;letter-spacing:.04em;text-shadow:0 4px 18px #0008}
-#start h2{font-size:22px;margin:0 0 10px}
-#start p{font-size:14px;line-height:1.45;opacity:.85;margin:8px 0}
-#start button{font:700 17px system-ui,sans-serif;border-radius:12px;padding:14px 16px;cursor:pointer;width:100%;margin:6px 0;border:0;touch-action:manipulation}
-#start .big{background:#fff;color:#20242a}
-#start .big:disabled{opacity:.45;cursor:default}
-#start .big i{font-style:normal;font-size:12px;opacity:.7;margin-left:6px}
-#start .ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);font-size:15px;padding:10px}
-#start canvas{background:#fff;border-radius:10px;width:min(300px,78vw);height:auto;image-rendering:pixelated;margin:8px auto;display:block}
-#start video{width:min(340px,90vw);border-radius:12px;background:#000;max-height:44vh;object-fit:cover}
-#start textarea{width:100%;box-sizing:border-box;height:60px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.35);color:#fff;font:12px ui-monospace,monospace;padding:8px;resize:none;margin-top:6px}
-#start .code{font:800 44px ui-monospace,monospace;letter-spacing:.06em;margin:10px 0;background:rgba(0,0,0,.3);border-radius:12px;padding:12px}
-#start input{flex:1;min-width:0;box-sizing:border-box;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.35);color:#fff;font:700 18px ui-monospace,monospace;padding:10px;margin:6px 0}
-#start .row{display:flex;gap:8px}
-#start .row button{flex:1}`;
-document.head.appendChild(stCss);
-const st=document.createElement('div'); st.id='start';
-st.innerHTML=`<div class="card" data-s="home"><h1>Ping Pong</h1>
-<button class="big" id="bAI">Play vs AI</button>
-<button class="big" id="bLAN">Multiplayer · LAN</button>
-<button class="big" id="bOn">Multiplayer · Online</button></div>
-<div class="card" data-s="lan"><h2>LAN match</h2>
-<p>Two devices on the same Wi-Fi (or one phone's hotspot). No internet needed. One device hosts and the other joins: you show and scan each other's code.</p>
-<button class="big" id="bHost">Host a match</button><button class="big" id="bJoin">Join a match</button><button class="ghost" id="bLanBack">Back</button></div>
-<div class="card" data-s="wait"><h2 id="waitT">Please wait…</h2><p id="waitP"></p></div>
-<div class="card" data-s="show"><h2 id="showT"></h2><canvas id="qr"></canvas><p id="showP"></p><textarea id="showTxt" readonly></textarea>
-<div class="row"><button class="ghost" id="bCopy">Copy code</button><button class="big" id="bNext">Next: scan their reply</button></div><button class="ghost" id="bShowBack">Cancel</button></div>
-<div class="card" data-s="scan"><h2 id="scanT"></h2><video id="scanVid" playsinline muted></video><p id="scanP"></p>
-<textarea id="scanTxt" placeholder="…or paste their code here"></textarea><button class="big" id="bGo">Connect</button><button class="ghost" id="bScanBack">Cancel</button></div>
-<div class="card" data-s="online"><h2>Online match</h2><p>Needs internet on both devices. Create a room, or pick one from the list.</p>
-<button class="big" id="bCreate">Create a room</button><button class="big" id="bJoinRoom">Join a room</button><button class="ghost" id="bOnBack">Back</button></div>
-<div class="card" data-s="hostroom"><h2>Your room</h2><div class="code" id="roomCode"></div><p>Waiting for a player to join…<br>Tell your friend this code, or they can pick it from the list.</p><button class="ghost" id="bHostCancel">Cancel</button></div>
-<div class="card" data-s="rooms"><h2>Open rooms</h2><div id="roomList"></div>
-<p>Or type a room code:</p><div class="row"><input id="codeIn" placeholder="sate-01" autocapitalize="off" autocomplete="off"><button class="big" id="bCodeGo" style="flex:0 0 90px">Join</button></div><button class="ghost" id="bRoomsBack">Back</button></div>`;
-document.body.appendChild(st);
-st.addEventListener('pointerdown',e=>e.stopPropagation());
-const showStart=n=>{st.style.display='flex';st.querySelectorAll('.card').forEach(c=>c.classList.toggle('on',c.dataset.s===n));};
-const hideStart=()=>{st.style.display='none';};
+
+// ---- start screen (Main menu.svg) + LAN / Online sub-screens ----
+const showStart=n=>{
+  const main=$('uiMain'), def=$('uiDefault'), inv=$('uiInv');
+  if(n==='home'){
+    main.classList.add('on');
+    $('mainBtns').style.display='flex';
+    $('subCards').classList.remove('on');
+    $('subCards').querySelectorAll('.card').forEach(c=>c.style.display='none');
+  }else{
+    main.classList.add('on');
+    $('mainBtns').style.display='none';
+    $('subCards').classList.add('on');
+    $('subCards').querySelectorAll('.card').forEach(c=>{
+      c.style.display = (c.dataset.s===n) ? 'block' : 'none';
+    });
+  }
+  if(def)def.classList.remove('on');
+  if(inv)inv.classList.remove('open');
+  paused=true;
+};
+const hideStart=()=>{
+  const main=$('uiMain'), def=$('uiDefault');
+  if(main)main.classList.remove('on');
+  if(def)def.classList.add('on');
+  paused=false;
+};
 function waitScreen(t,pt){$('waitT').textContent=t;$('waitP').textContent=pt||'';showStart('wait');}
 function setModeUI(){
-  const ai=mode==='ai'; aiHead.style.display=ai?'':'none'; for(const k in aiBtn)aiBtn[k].style.display=ai?'':'none';
-  $('lblA').style.display=selEl.A.style.display=ai?'':'none'; selEl.T.disabled=!ai;
+  const ai=mode==='ai';
+  const lbl=$('lblA');
+  if(lbl)lbl.style.display=ai?'':'none';
+  if(selEl.A)selEl.A.style.display=ai?'':'none';
+  if(selEl.T)selEl.T.disabled=!ai;
+  const aiDiff=$('aiDiff');
+  if(aiDiff)aiDiff.style.display=ai?'flex':'none';
 }
 function beginMP(role){ saved={A:sel.A,T:sel.T}; mode=role; oppLabel='Opponent'; hud(); setModeUI(); }
 function leaveMatch(note,screen='home'){
